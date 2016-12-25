@@ -509,6 +509,12 @@ static const uint16_t kSignSignatureAlgorithms[] = {
 };
 
 size_t tls12_get_verify_sigalgs(const SSL *ssl, const uint16_t **out) {
+	
+  CERT *cert = ssl->cert;
+  if (cert->sigalgs != NULL) {
+    *out = cert->sigalgs;
+    return cert->num_sigalgs;
+  }
   *out = kVerifySignatureAlgorithms;
   return OPENSSL_ARRAY_SIZE(kVerifySignatureAlgorithms);
 }
