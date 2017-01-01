@@ -123,7 +123,7 @@ static void bn_mul_normal(BN_ULONG *r, BN_ULONG *a, int na, BN_ULONG *b,
  * in bn_asm.c as soon as there are assembler counterparts for the systems that
  * use assembler files.  */
 
-static BN_ULONG bn_sub_part_words(BN_ULONG *r, const BN_ULONG *a,
+static BN_ULONG OPENSSL_CDECL bn_sub_part_words(BN_ULONG *r, const BN_ULONG *a,
                                   const BN_ULONG *b, int cl, int dl) {
   BN_ULONG c, t;
 
@@ -275,7 +275,7 @@ static BN_ULONG bn_sub_part_words(BN_ULONG *r, const BN_ULONG *a,
 }
 #else
 /* On other platforms the function is defined in asm. */
-BN_ULONG bn_sub_part_words(BN_ULONG *r, const BN_ULONG *a, const BN_ULONG *b,
+BN_ULONG OPENSSL_CDECL bn_sub_part_words(BN_ULONG *r, const BN_ULONG *a, const BN_ULONG *b,
                            int cl, int dl);
 #endif
 

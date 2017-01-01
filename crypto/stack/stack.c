@@ -253,7 +253,7 @@ int sk_find(_STACK *sk, size_t *out_index, void *p) {
    * qsort/bsearch, we can just cast the comparison function and everything
    * works. */
   const void *const *r = bsearch(&p, sk->data, sk->num, sizeof(void *),
-                                 (int (*)(const void *, const void *))sk->comp);
+                                 (int (OPENSSL_CDECL *)(const void *, const void *))sk->comp);
   if (r == NULL) {
     return 0;
   }
@@ -323,14 +323,14 @@ err:
 }
 
 void sk_sort(_STACK *sk) {
-  int (*comp_func)(const void *,const void *);
+  int (OPENSSL_CDECL *comp_func)(const void *,const void *);
 
   if (sk == NULL || sk->comp == NULL || sk->sorted) {
     return;
   }
 
   /* See the comment in sk_find about this cast. */
-  comp_func = (int (*)(const void *, const void *))(sk->comp);
+  comp_func = (int (OPENSSL_CDECL *)(const void *, const void *))(sk->comp);
   qsort(sk->data, sk->num, sizeof(void *), comp_func);
   sk->sorted = 1;
 }

@@ -212,16 +212,16 @@ int bn_expand(BIGNUM *bn, size_t bits);
  * least significant word first. */
 int bn_set_words(BIGNUM *bn, const BN_ULONG *words, size_t num);
 
-BN_ULONG bn_mul_add_words(BN_ULONG *rp, const BN_ULONG *ap, int num, BN_ULONG w);
-BN_ULONG bn_mul_words(BN_ULONG *rp, const BN_ULONG *ap, int num, BN_ULONG w);
-void     bn_sqr_words(BN_ULONG *rp, const BN_ULONG *ap, int num);
-BN_ULONG bn_add_words(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,int num);
-BN_ULONG bn_sub_words(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,int num);
+BN_ULONG OPENSSL_CDECL bn_mul_add_words(BN_ULONG *rp, const BN_ULONG *ap, int num, BN_ULONG w);
+BN_ULONG OPENSSL_CDECL bn_mul_words(BN_ULONG *rp, const BN_ULONG *ap, int num, BN_ULONG w);
+void     OPENSSL_CDECL bn_sqr_words(BN_ULONG *rp, const BN_ULONG *ap, int num);
+BN_ULONG OPENSSL_CDECL bn_add_words(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,int num);
+BN_ULONG OPENSSL_CDECL bn_sub_words(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,int num);
 
-void bn_mul_comba4(BN_ULONG *r, BN_ULONG *a, BN_ULONG *b);
-void bn_mul_comba8(BN_ULONG *r, BN_ULONG *a, BN_ULONG *b);
-void bn_sqr_comba8(BN_ULONG *r, const BN_ULONG *a);
-void bn_sqr_comba4(BN_ULONG *r, const BN_ULONG *a);
+void OPENSSL_CDECL bn_mul_comba4(BN_ULONG *r, BN_ULONG *a, BN_ULONG *b);
+void OPENSSL_CDECL bn_mul_comba8(BN_ULONG *r, BN_ULONG *a, BN_ULONG *b);
+void OPENSSL_CDECL bn_sqr_comba8(BN_ULONG *r, const BN_ULONG *a);
+void OPENSSL_CDECL bn_sqr_comba4(BN_ULONG *r, const BN_ULONG *a);
 
 /* bn_cmp_words returns a value less than, equal to or greater than zero if
  * the, length |n|, array |a| is less than, equal to or greater than |b|. */
@@ -233,7 +233,7 @@ int bn_cmp_words(const BN_ULONG *a, const BN_ULONG *b, int n);
  * the length of |a| minus the length of |b|. */
 int bn_cmp_part_words(const BN_ULONG *a, const BN_ULONG *b, int cl, int dl);
 
-int bn_mul_mont(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,
+int OPENSSL_CDECL bn_mul_mont(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,
                 const BN_ULONG *np, const BN_ULONG *n0, int num);
 
 uint64_t bn_mont_n0(const BIGNUM *n);

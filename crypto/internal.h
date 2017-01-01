@@ -372,7 +372,7 @@ typedef size_t CRYPTO_once_t [4];
  *
  * The |once| argument must be a |CRYPTO_once_t| that has been initialised with
  * the value |CRYPTO_ONCE_INIT|. */
-OPENSSL_EXPORT void CRYPTO_once(CRYPTO_once_t *once, void (*init)(void));
+OPENSSL_EXPORT void CRYPTO_once(CRYPTO_once_t *once, void (OPENSSL_CDECL *init)(void));
 
 
 /* Reference counting. */

@@ -36,7 +36,7 @@ static BOOL CALLBACK call_once_init(INIT_ONCE *once, void *arg, void **out) {
   return TRUE;
 }
 
-void CRYPTO_once(CRYPTO_once_t *once, void (*init)(void)) {
+void CRYPTO_once(CRYPTO_once_t *once, void (OPENSSL_CDECL * init)(void)) {
   if (!InitOnceExecuteOnce(once, call_once_init, &init, NULL)) {
     abort();
   }
@@ -89,7 +89,7 @@ static CRYPTO_once_t g_thread_local_init_once = CRYPTO_ONCE_INIT;
 static DWORD g_thread_local_key;
 static int g_thread_local_failed;
 
-static void thread_local_init(void) {
+static void  OPENSSL_CDECL thread_local_init(void) {
   if (!InitializeCriticalSectionAndSpinCount(&g_destructors_lock, 0x400)) {
     g_thread_local_failed = 1;
     return;
