@@ -345,6 +345,7 @@ add_library(
   thread.c
   thread_none.c
   thread_pthread.c
+  thread_malterlib.cpp
   thread_win.c
   trust_token/pmbtoken.c
   trust_token/trust_token.c

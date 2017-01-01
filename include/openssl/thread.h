@@ -70,6 +70,10 @@ extern "C" {
 typedef struct crypto_mutex_st {
   char padding;  // Empty structs have different sizes in C and C++.
 } CRYPTO_MUTEX;
+#elif defined(DMalterlib)
+typedef struct crypto_mutex_st {
+  size_t Data[11];
+} CRYPTO_MUTEX;
 #elif defined(OPENSSL_WINDOWS)
 // CRYPTO_MUTEX can appear in public header files so we really don't want to
 // pull in windows.h. It's statically asserted that this structure is large
