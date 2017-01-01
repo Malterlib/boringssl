@@ -35,14 +35,23 @@
 #include <stdlib.h>
 #endif
 
-#if defined(OPENSSL_THREADS) && \
+#if defined(OPENSSL_THREADS) && defined(DMalterlib)
+#define OPENSSL_MALTERLIB_THREADS
+// The Malterlib locking primitives are declared inline below so that `Mutex`
+// and `CRYPTO_once_t` hold real objects rather than opaque storage that is
+// reinterpret_cast in `thread_malterlib.cc`.
+#include <Mib/Core/Core>
+#endif
+
+
+#if defined(OPENSSL_THREADS) && !defined(OPENSSL_MALTERLIB_THREADS) && \
     (!defined(OPENSSL_WINDOWS) || defined(__MINGW32__))
 #include <pthread.h>
 #define OPENSSL_PTHREADS
 #endif
 
 #if defined(OPENSSL_THREADS) && !defined(OPENSSL_PTHREADS) && \
-    defined(OPENSSL_WINDOWS)
+    defined(OPENSSL_WINDOWS) && !defined(OPENSSL_MALTERLIB_THREADS)
 #define OPENSSL_WINDOWS_THREADS
 #endif
 
@@ -547,6 +556,12 @@ typedef INIT_ONCE CRYPTO_once_t;
 #elif defined(OPENSSL_PTHREADS)
 typedef pthread_once_t CRYPTO_once_t;
 #define CRYPTO_ONCE_INIT PTHREAD_ONCE_INIT
+#elif defined(OPENSSL_MALTERLIB_THREADS)
+struct CRYPTO_once_t {
+  NMib::NThread::CLowLevelLockAggregate m_Lock = {DAggregateInit};
+  NMib::NAtomic::TCAtomic<bool> m_bInited;
+};
+#define CRYPTO_ONCE_INIT {}
 #else
 #error "Unknown threading library"
 #endif
@@ -636,6 +651,65 @@ OPENSSL_EXPORT int CRYPTO_refcount_dec_and_test_zero(CRYPTO_refcount_t *count);
 
 // Locks.
 
+#if defined(OPENSSL_MALTERLIB_THREADS)
+
+// MalterlibLock is the read/write lock behind StaticMutex and Mutex. It
+// registers itself with the BoringSSL subsystem so that every live lock can be
+// taken across a fork.
+struct MalterlibLock : public NMib::NThread::CMutualManyRead {
+  MalterlibLock();
+  ~MalterlibLock();
+
+  DLinkDS_Link(MalterlibLock, m_Link);
+};
+
+// A StaticMutex is a read/write lock that is constant-initialized and never
+// destructed, for globals. A MalterlibLock cannot be constructed during static
+// initialization, so it is held in an aggregate which constructs it on first
+// use and destructs it at shutdown.
+class OPENSSL_EXPORT StaticMutex {
+ public:
+  constexpr StaticMutex() = default;
+  StaticMutex(const StaticMutex &) = delete;
+  StaticMutex &operator=(const StaticMutex &) = delete;
+
+  // LockRead locks the mutex such that other threads may also have a read lock,
+  // but none may have a write lock.
+  void LockRead() { lock_->f_LockRead(); }
+  // UnlockRead releases a read lock.
+  void UnlockRead() { lock_->f_UnlockRead(); }
+
+  // LockWrite locks the mutex such that no other thread has any type of lock on
+  // it.
+  void LockWrite() { lock_->f_Lock(); }
+  // UnlockWrite releases a write lock.
+  void UnlockWrite() { lock_->f_Unlock(); }
+
+ private:
+  NMib::NStorage::TCAggregate<MalterlibLock, 125,
+                              NMib::NThread::CLowLevelLockAggregate>
+      lock_ = {DAggregateInit};
+};
+
+// A Mutex is a read/write lock which is constructed and destructed with its
+// owner. It cannot be constant-initialized, so use StaticMutex for globals.
+class OPENSSL_EXPORT Mutex {
+ public:
+  Mutex() = default;
+  Mutex(const Mutex &) = delete;
+  Mutex &operator=(const Mutex &) = delete;
+
+  void LockRead() { lock_.f_LockRead(); }
+  void UnlockRead() { lock_.f_UnlockRead(); }
+  void LockWrite() { lock_.f_Lock(); }
+  void UnlockWrite() { lock_.f_Unlock(); }
+
+ private:
+  MalterlibLock lock_;
+};
+
+#else
+
 // A Mutex is a read/write lock. It can be constant-initialized, but has a
 // destructor. To allocate a global one, use StaticMutex, which skips the
 // destructor.
@@ -675,14 +749,17 @@ class OPENSSL_EXPORT Mutex  : public StaticMutex {
   ~Mutex();
 };
 
+#endif  // OPENSSL_MALTERLIB_THREADS
+
 namespace internal {
 
-// MutexLockBase is a RAII helper for Mutex locking.
-template <void (StaticMutex::*LockMethod)(),
-          void (StaticMutex::*ReleaseMethod)()>
+// MutexLockBase is a RAII helper for Mutex locking. It is templated on the
+// mutex type because Mutex and StaticMutex are unrelated types in some
+// threading backends.
+template <typename Mu, void (Mu::*LockMethod)(), void (Mu::*ReleaseMethod)()>
 class MutexLockBase {
  public:
-  explicit MutexLockBase(StaticMutex *mu) : mu_(mu) {
+  explicit MutexLockBase(Mu *mu) : mu_(mu) {
     assert(mu_ != nullptr);
     (mu_->*LockMethod)();
   }
@@ -691,19 +768,42 @@ class MutexLockBase {
   MutexLockBase &operator=(const MutexLockBase &) = delete;
 
  private:
-  StaticMutex *const mu_;
+  Mu *const mu_;
 };
 
 }  // namespace internal
 
-using MutexWriteLock =
-    internal::MutexLockBase<&StaticMutex::LockWrite, &StaticMutex::UnlockWrite>;
-using MutexReadLock =
-    internal::MutexLockBase<&StaticMutex::LockRead, &StaticMutex::UnlockRead>;
-using MutexWriteUnlock =
-    internal::MutexLockBase<&StaticMutex::UnlockWrite, &StaticMutex::LockWrite>;
-using MutexReadUnlock =
-    internal::MutexLockBase<&StaticMutex::UnlockRead, &StaticMutex::LockRead>;
+template <typename Mu>
+class MutexWriteLock
+    : public internal::MutexLockBase<Mu, &Mu::LockWrite, &Mu::UnlockWrite> {
+ public:
+  explicit MutexWriteLock(Mu *mu)
+      : internal::MutexLockBase<Mu, &Mu::LockWrite, &Mu::UnlockWrite>(mu) {}
+};
+
+template <typename Mu>
+class MutexReadLock
+    : public internal::MutexLockBase<Mu, &Mu::LockRead, &Mu::UnlockRead> {
+ public:
+  explicit MutexReadLock(Mu *mu)
+      : internal::MutexLockBase<Mu, &Mu::LockRead, &Mu::UnlockRead>(mu) {}
+};
+
+template <typename Mu>
+class MutexWriteUnlock
+    : public internal::MutexLockBase<Mu, &Mu::UnlockWrite, &Mu::LockWrite> {
+ public:
+  explicit MutexWriteUnlock(Mu *mu)
+      : internal::MutexLockBase<Mu, &Mu::UnlockWrite, &Mu::LockWrite>(mu) {}
+};
+
+template <typename Mu>
+class MutexReadUnlock
+    : public internal::MutexLockBase<Mu, &Mu::UnlockRead, &Mu::LockRead> {
+ public:
+  explicit MutexReadUnlock(Mu *mu)
+      : internal::MutexLockBase<Mu, &Mu::UnlockRead, &Mu::LockRead>(mu) {}
+};
 
 
 // Thread local storage.
