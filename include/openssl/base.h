@@ -112,6 +112,13 @@ extern "C" {
 
 #if defined(_WIN32)
 #define OPENSSL_WINDOWS
+// Incompatibility with wincrypt.h
+#undef X509_NAME 
+#undef X509_EXTENSIONS 
+#undef PKCS7_ISSUER_AND_SERIAL 
+#undef OCSP_REQUEST 
+#undef OCSP_RESPONSE 
+#undef X509_CERT_PAIR
 #endif
 
 #if defined(__linux__)
