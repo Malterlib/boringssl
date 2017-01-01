@@ -85,7 +85,7 @@ void CRYPTO_STATIC_MUTEX_unlock_write(struct CRYPTO_STATIC_MUTEX *lock) {
   }
 }
 
-void CRYPTO_once(CRYPTO_once_t *once, void (*init)(void)) {
+void CRYPTO_once(CRYPTO_once_t *once, void (OPENSSL_CDECL * init)(void)) {
   if (pthread_once(once, init) != 0) {
     abort();
   }
@@ -121,7 +121,7 @@ static pthread_once_t g_thread_local_init_once = PTHREAD_ONCE_INIT;
 static pthread_key_t g_thread_local_key;
 static int g_thread_local_failed = 0;
 
-static void thread_local_init(void) {
+static void OPENSSL_CDECL thread_local_init(void) {
   g_thread_local_failed =
       pthread_key_create(&g_thread_local_key, thread_local_destructor) != 0;
 }

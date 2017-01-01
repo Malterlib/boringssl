@@ -175,7 +175,7 @@ int OBJ_cmp(const ASN1_OBJECT *a, const ASN1_OBJECT *b) {
 // obj_cmp is called to search the kNIDsInOIDOrder array. The |key| argument is
 // an |ASN1_OBJECT|* that we're looking for and |element| is a pointer to an
 // unsigned int in the array.
-static int obj_cmp(const void *key, const void *element) {
+static int OPENSSL_CDECL obj_cmp(const void *key, const void *element) {
   unsigned nid = *((const unsigned*) element);
   const ASN1_OBJECT *a = key;
   const ASN1_OBJECT *b = &kObjects[nid];
@@ -236,7 +236,7 @@ int OBJ_cbs2nid(const CBS *cbs) {
 // short_name_cmp is called to search the kNIDsInShortNameOrder array. The
 // |key| argument is name that we're looking for and |element| is a pointer to
 // an unsigned int in the array.
-static int short_name_cmp(const void *key, const void *element) {
+static int OPENSSL_CDECL short_name_cmp(const void *key, const void *element) {
   const char *name = (const char *) key;
   unsigned nid = *((unsigned*) element);
 
@@ -272,7 +272,7 @@ int OBJ_sn2nid(const char *short_name) {
 // long_name_cmp is called to search the kNIDsInLongNameOrder array. The
 // |key| argument is name that we're looking for and |element| is a pointer to
 // an unsigned int in the array.
-static int long_name_cmp(const void *key, const void *element) {
+static int OPENSSL_CDECL long_name_cmp(const void *key, const void *element) {
   const char *name = (const char *) key;
   unsigned nid = *((unsigned*) element);
 

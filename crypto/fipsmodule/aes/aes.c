@@ -677,7 +677,7 @@ int AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
   return 0;
 }
 
-void AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+void OPENSSL_CDECL AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
   const uint32_t *rk;
   uint32_t s0, s1, s2, s3, t0, t1, t2, t3;
 #ifndef FULL_UNROLL
@@ -863,7 +863,7 @@ void AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
   PUTU32(out + 12, s3);
 }
 
-void AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+void OPENSSL_CDECL AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
   const uint32_t *rk;
   uint32_t s0, s1, s2, s3, t0, t1, t2, t3;
 #ifndef FULL_UNROLL
@@ -1061,8 +1061,8 @@ void AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
 // always hidden and wrapped by these C functions, which can be so
 // controlled.
 
-void asm_AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
-void AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+void OPENSSL_CDECL asm_AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+void OPENSSL_CDECL AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
   if (hwaes_capable()) {
     aes_hw_encrypt(in, out, key);
   } else {
@@ -1070,8 +1070,8 @@ void AES_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
   }
 }
 
-void asm_AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
-void AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+void OPENSSL_CDECL asm_AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+void OPENSSL_CDECL AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
   if (hwaes_capable()) {
     aes_hw_decrypt(in, out, key);
   } else {
@@ -1079,8 +1079,8 @@ void AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
   }
 }
 
-int asm_AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey);
-int AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
+int OPENSSL_CDECL asm_AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey);
+int OPENSSL_CDECL AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
   if (hwaes_capable()) {
     return aes_hw_set_encrypt_key(key, bits, aeskey);
   } else {
@@ -1088,8 +1088,8 @@ int AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
   }
 }
 
-int asm_AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey);
-int AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
+int OPENSSL_CDECL asm_AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey);
+int OPENSSL_CDECL AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
   if (hwaes_capable()) {
     return aes_hw_set_decrypt_key(key, bits, aeskey);
   } else {

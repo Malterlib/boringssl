@@ -110,7 +110,7 @@ static inline void PUTU32(void *out, uint32_t v) {
 }
 
 // block128_f is the type of a 128-bit, block cipher.
-typedef void (*block128_f)(const uint8_t in[16], uint8_t out[16],
+typedef void (OPENSSL_CDECL *block128_f)(const uint8_t in[16], uint8_t out[16],
                            const void *key);
 
 // GCM definitions
@@ -118,12 +118,12 @@ typedef struct { uint64_t hi,lo; } u128;
 
 // gmult_func multiplies |Xi| by the GCM key and writes the result back to
 // |Xi|.
-typedef void (*gmult_func)(uint64_t Xi[2], const u128 Htable[16]);
+typedef void (OPENSSL_CDECL *gmult_func)(uint64_t Xi[2], const u128 Htable[16]);
 
 // ghash_func repeatedly multiplies |Xi| by the GCM key and adds in blocks from
 // |inp|. The result is written back to |Xi| and the |len| argument must be a
 // multiple of 16.
-typedef void (*ghash_func)(uint64_t Xi[2], const u128 Htable[16],
+typedef void (OPENSSL_CDECL *ghash_func)(uint64_t Xi[2], const u128 Htable[16],
                            const uint8_t *inp, size_t len);
 
 // This differs from upstream's |gcm128_context| in that it does not have the
@@ -163,7 +163,7 @@ int crypto_gcm_clmul_enabled(void);
 // CTR.
 
 // ctr128_f is the type of a function that performs CTR-mode encryption.
-typedef void (*ctr128_f)(const uint8_t *in, uint8_t *out, size_t blocks,
+typedef void (OPENSSL_CDECL *ctr128_f)(const uint8_t *in, uint8_t *out, size_t blocks,
                          const void *key, const uint8_t ivec[16]);
 
 // CRYPTO_ctr128_encrypt encrypts (or decrypts, it's the same in CTR mode)
@@ -188,7 +188,7 @@ void CRYPTO_ctr128_encrypt_ctr32(const uint8_t *in, uint8_t *out, size_t len,
 
 #if !defined(OPENSSL_NO_ASM) && \
     (defined(OPENSSL_X86) || defined(OPENSSL_X86_64))
-void aesni_ctr32_encrypt_blocks(const uint8_t *in, uint8_t *out, size_t blocks,
+void OPENSSL_CDECL aesni_ctr32_encrypt_blocks(const uint8_t *in, uint8_t *out, size_t blocks,
                                 const void *key, const uint8_t *ivec);
 #endif
 
@@ -274,7 +274,7 @@ OPENSSL_EXPORT void CRYPTO_gcm128_tag(GCM128_CONTEXT *ctx, uint8_t *tag,
 // CBC.
 
 // cbc128_f is the type of a function that performs CBC-mode encryption.
-typedef void (*cbc128_f)(const uint8_t *in, uint8_t *out, size_t len,
+typedef void (OPENSSL_CDECL *cbc128_f)(const uint8_t *in, uint8_t *out, size_t len,
                          const void *key, uint8_t ivec[16], int enc);
 
 // CRYPTO_cbc128_encrypt encrypts |len| bytes from |in| to |out| using the

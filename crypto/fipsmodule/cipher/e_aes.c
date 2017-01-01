@@ -153,13 +153,13 @@ static void bsaes_ctr32_encrypt_blocks(const uint8_t *in, uint8_t *out,
 #if defined(VPAES)
 // On platforms where VPAES gets defined (just above), then these functions are
 // provided by asm.
-int vpaes_set_encrypt_key(const uint8_t *userKey, int bits, AES_KEY *key);
-int vpaes_set_decrypt_key(const uint8_t *userKey, int bits, AES_KEY *key);
+int OPENSSL_CDECL vpaes_set_encrypt_key(const uint8_t *userKey, int bits, AES_KEY *key);
+int OPENSSL_CDECL vpaes_set_decrypt_key(const uint8_t *userKey, int bits, AES_KEY *key);
 
-void vpaes_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
-void vpaes_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+void OPENSSL_CDECL vpaes_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+void OPENSSL_CDECL vpaes_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
 
-void vpaes_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t length,
+void OPENSSL_CDECL vpaes_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t length,
                        const AES_KEY *key, uint8_t *ivec, int enc);
 #else
 static char vpaes_capable(void) {
@@ -168,21 +168,21 @@ static char vpaes_capable(void) {
 
 // On other platforms, vpaes_capable() will always return false and so the
 // following will never be called.
-static int vpaes_set_encrypt_key(const uint8_t *userKey, int bits,
+static int OPENSSL_CDECL vpaes_set_encrypt_key(const uint8_t *userKey, int bits,
                                  AES_KEY *key) {
   abort();
 }
-static int vpaes_set_decrypt_key(const uint8_t *userKey, int bits,
+static int OPENSSL_CDECL vpaes_set_decrypt_key(const uint8_t *userKey, int bits,
                                  AES_KEY *key) {
   abort();
 }
-static void vpaes_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+static void OPENSSL_CDECL vpaes_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
   abort();
 }
-static void vpaes_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+static void OPENSSL_CDECL vpaes_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
   abort();
 }
-static void vpaes_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t length,
+static void OPENSSL_CDECL vpaes_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t length,
                               const AES_KEY *key, uint8_t *ivec, int enc) {
   abort();
 }
@@ -190,25 +190,25 @@ static void vpaes_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t length,
 
 #if !defined(OPENSSL_NO_ASM) && \
     (defined(OPENSSL_X86_64) || defined(OPENSSL_X86))
-int aesni_set_encrypt_key(const uint8_t *userKey, int bits, AES_KEY *key);
-int aesni_set_decrypt_key(const uint8_t *userKey, int bits, AES_KEY *key);
+int OPENSSL_CDECL aesni_set_encrypt_key(const uint8_t *userKey, int bits, AES_KEY *key);
+int OPENSSL_CDECL aesni_set_decrypt_key(const uint8_t *userKey, int bits, AES_KEY *key);
 
-void aesni_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
-void aesni_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+void OPENSSL_CDECL aesni_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+void OPENSSL_CDECL aesni_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
 
-void aesni_ecb_encrypt(const uint8_t *in, uint8_t *out, size_t length,
+void OPENSSL_CDECL aesni_ecb_encrypt(const uint8_t *in, uint8_t *out, size_t length,
                        const AES_KEY *key, int enc);
-void aesni_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t length,
+void OPENSSL_CDECL aesni_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t length,
                        const AES_KEY *key, uint8_t *ivec, int enc);
 
 #else
 
 // On other platforms, aesni_capable() will always return false and so the
 // following will never be called.
-static void aesni_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
+static void OPENSSL_CDECL aesni_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key) {
   abort();
 }
-static int aesni_set_encrypt_key(const uint8_t *userKey, int bits,
+static int OPENSSL_CDECL aesni_set_encrypt_key(const uint8_t *userKey, int bits,
                                  AES_KEY *key) {
   abort();
 }

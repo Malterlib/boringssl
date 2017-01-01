@@ -113,7 +113,7 @@ static void message(const char *msg) {
 // requested. This is the only function that modifies |urandom_fd| and
 // |urandom_buffering|, whose values may be read safely after calling the
 // once.
-static void init_once(void) {
+static void  OPENSSL_CDECL init_once(void) {
   CRYPTO_STATIC_MUTEX_lock_read(rand_lock_bss_get());
   int fd = *urandom_fd_requested_bss_get();
   CRYPTO_STATIC_MUTEX_unlock_read(rand_lock_bss_get());
