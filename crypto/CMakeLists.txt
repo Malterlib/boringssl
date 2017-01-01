@@ -325,6 +325,7 @@ add_library(
   thread.c
   thread_none.c
   thread_pthread.c
+  thread_malterlib.cpp
   thread_win.c
   x509/a_digest.c
   x509/a_sign.c
