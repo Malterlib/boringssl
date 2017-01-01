@@ -632,7 +632,7 @@ static const CIPHER_ALIAS kCipherAliases[] = {
 
 static const size_t kCipherAliasesLen = OPENSSL_ARRAY_SIZE(kCipherAliases);
 
-static int ssl_cipher_id_cmp(const void *in_a, const void *in_b) {
+static int OPENSSL_CDECL ssl_cipher_id_cmp(const void *in_a, const void *in_b) {
   const SSL_CIPHER *a = reinterpret_cast<const SSL_CIPHER *>(in_a);
   const SSL_CIPHER *b = reinterpret_cast<const SSL_CIPHER *>(in_b);
 

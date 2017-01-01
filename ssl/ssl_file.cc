@@ -124,7 +124,7 @@
 #include "internal.h"
 
 
-static int xname_cmp(const X509_NAME **a, const X509_NAME **b) {
+static int OPENSSL_CDECL xname_cmp(const X509_NAME **a, const X509_NAME **b) {
   return X509_NAME_cmp(*a, *b);
 }
 
@@ -199,7 +199,7 @@ int SSL_add_file_cert_subjects_to_stack(STACK_OF(X509_NAME) *stack,
   X509 *x = NULL;
   X509_NAME *xn = NULL;
   int ret = 0;
-  int (*oldcmp)(const X509_NAME **a, const X509_NAME **b);
+  int (OPENSSL_CDECL *oldcmp)(const X509_NAME **a, const X509_NAME **b);
 
   oldcmp = sk_X509_NAME_set_cmp_func(stack, xname_cmp);
   in = BIO_new(BIO_s_file());

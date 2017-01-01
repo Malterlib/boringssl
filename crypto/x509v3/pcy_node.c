@@ -63,7 +63,7 @@
 
 #include "pcy_int.h"
 
-static int node_cmp(const X509_POLICY_NODE **a, const X509_POLICY_NODE **b)
+static int OPENSSL_CDECL node_cmp(const X509_POLICY_NODE **a, const X509_POLICY_NODE **b)
 {
     return OBJ_cmp((*a)->data->valid_policy, (*b)->data->valid_policy);
 }

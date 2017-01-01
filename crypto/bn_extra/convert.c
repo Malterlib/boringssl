@@ -184,7 +184,7 @@ static int decode_dec(BIGNUM *bn, const char *in, int in_len) {
 }
 
 typedef int (*decode_func) (BIGNUM *bn, const char *in, int in_len);
-typedef int (*char_test_func) (int c);
+typedef int (OPENSSL_CDECL *char_test_func) (int c);
 
 static int bn_x2bn(BIGNUM **outp, const char *in, decode_func decode, char_test_func want_char) {
   BIGNUM *ret = NULL;

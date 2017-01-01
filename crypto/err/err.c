@@ -448,7 +448,7 @@ void ERR_error_string_n(uint32_t packed_error, char *buf, size_t len) {
 
 // err_string_cmp is a compare function for searching error values with
 // |bsearch| in |err_string_lookup|.
-static int err_string_cmp(const void *a, const void *b) {
+static int OPENSSL_CDECL err_string_cmp(const void *a, const void *b) {
   const uint32_t a_key = *((const uint32_t*) a) >> 15;
   const uint32_t b_key = *((const uint32_t*) b) >> 15;
 
