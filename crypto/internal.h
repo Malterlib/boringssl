@@ -133,12 +133,17 @@
 #endif
 
 #if !defined(OPENSSL_NO_THREADS) && \
+    defined(DMalterlib)
+#define OPENSSL_MALTERLIB_THREADS
+#endif
+
+#if !defined(OPENSSL_NO_THREADS) && !defined(OPENSSL_MALTERLIB_THREADS) && \
     (!defined(OPENSSL_WINDOWS) || defined(__MINGW32__))
 #include <pthread.h>
 #define OPENSSL_PTHREADS
 #endif
 
-#if !defined(OPENSSL_NO_THREADS) && !defined(OPENSSL_PTHREADS) && \
+#if !defined(OPENSSL_NO_THREADS) && !defined(OPENSSL_MALTERLIB_THREADS) && !defined(OPENSSL_PTHREADS) && \
     defined(OPENSSL_WINDOWS)
 #define OPENSSL_WINDOWS_THREADS
 OPENSSL_MSVC_PRAGMA(warning(push, 3))
@@ -380,6 +385,9 @@ typedef INIT_ONCE CRYPTO_once_t;
 #elif defined(OPENSSL_PTHREADS)
 typedef pthread_once_t CRYPTO_once_t;
 #define CRYPTO_ONCE_INIT PTHREAD_ONCE_INIT
+#elif defined(OPENSSL_MALTERLIB_THREADS)
+typedef size_t CRYPTO_once_t [4];
+#define CRYPTO_ONCE_INIT {0}
 #else
 #error "Unknown threading library"
 #endif
@@ -442,6 +450,11 @@ struct CRYPTO_STATIC_MUTEX {
   pthread_rwlock_t lock;
 };
 #define CRYPTO_STATIC_MUTEX_INIT { PTHREAD_RWLOCK_INITIALIZER }
+#elif defined(OPENSSL_MALTERLIB_THREADS)
+struct CRYPTO_STATIC_MUTEX {
+  size_t data[22];
+};
+#define CRYPTO_STATIC_MUTEX_INIT { 0 }
 #else
 #error "Unknown threading library"
 #endif
