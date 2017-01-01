@@ -129,6 +129,7 @@ add_library(
   thread_none.c
   thread_pthread.c
   thread_win.c
+  thread_malterlib.cpp
   time_support.c
 
   $<TARGET_OBJECTS:stack>
