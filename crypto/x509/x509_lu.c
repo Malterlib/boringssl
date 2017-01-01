@@ -160,7 +160,7 @@ int X509_LOOKUP_by_alias(X509_LOOKUP *ctx, int type, char *str, int len,
     return ctx->method->get_by_alias(ctx, type, str, len, ret) > 0;
 }
 
-static int x509_object_cmp(const X509_OBJECT **a, const X509_OBJECT **b)
+static int OPENSSL_CDECL x509_object_cmp(const X509_OBJECT **a, const X509_OBJECT **b)
 {
     int ret;
 

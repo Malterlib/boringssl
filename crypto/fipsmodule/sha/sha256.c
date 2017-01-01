@@ -174,7 +174,7 @@ int SHA224_Final(uint8_t *md, SHA256_CTX *ctx) {
 #ifndef SHA256_ASM
 static
 #endif
-void sha256_block_data_order(uint32_t *state, const uint8_t *in, size_t num);
+void OPENSSL_CDECL sha256_block_data_order(uint32_t *state, const uint8_t *in, size_t num);
 
 #include "../digest/md32_common.h"
 
@@ -225,7 +225,7 @@ static const uint32_t K256[64] = {
     ROUND_00_15(i, a, b, c, d, e, f, g, h);            \
   } while (0)
 
-static void sha256_block_data_order(uint32_t *state, const uint8_t *data,
+static void OPENSSL_CDECL sha256_block_data_order(uint32_t *state, const uint8_t *data,
                                     size_t num) {
   uint32_t a, b, c, d, e, f, g, h, s0, s1, T1;
   uint32_t X[16];

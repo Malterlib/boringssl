@@ -53,14 +53,14 @@
 #include "../modes/internal.h"
 
 
-void AES_ctr128_encrypt(const uint8_t *in, uint8_t *out, size_t len,
+void OPENSSL_CDECL AES_ctr128_encrypt(const uint8_t *in, uint8_t *out, size_t len,
                         const AES_KEY *key, uint8_t ivec[AES_BLOCK_SIZE],
                         uint8_t ecount_buf[AES_BLOCK_SIZE], unsigned int *num) {
   CRYPTO_ctr128_encrypt(in, out, len, key, ivec, ecount_buf, num,
                         (block128_f)AES_encrypt);
 }
 
-void AES_ecb_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key,
+void OPENSSL_CDECL AES_ecb_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key,
                      const int enc) {
   assert(in && out && key);
   assert((AES_ENCRYPT == enc) || (AES_DECRYPT == enc));
@@ -74,7 +74,7 @@ void AES_ecb_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key,
 
 #if defined(OPENSSL_NO_ASM) || \
     (!defined(OPENSSL_X86_64) && !defined(OPENSSL_X86))
-void AES_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t len,
+void OPENSSL_CDECL AES_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t len,
                      const AES_KEY *key, uint8_t *ivec, const int enc) {
 
   if (enc) {
@@ -85,16 +85,16 @@ void AES_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t len,
 }
 #else
 
-void asm_AES_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t len,
+void OPENSSL_CDECL asm_AES_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t len,
                          const AES_KEY *key, uint8_t *ivec, const int enc);
-void AES_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t len,
+void OPENSSL_CDECL AES_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t len,
                      const AES_KEY *key, uint8_t *ivec, const int enc) {
   asm_AES_cbc_encrypt(in, out, len, key, ivec, enc);
 }
 
 #endif  // OPENSSL_NO_ASM || (!OPENSSL_X86_64 && !OPENSSL_X86)
 
-void AES_ofb128_encrypt(const uint8_t *in, uint8_t *out, size_t length,
+void OPENSSL_CDECL AES_ofb128_encrypt(const uint8_t *in, uint8_t *out, size_t length,
                         const AES_KEY *key, uint8_t *ivec, int *num) {
   unsigned num_u = (unsigned)(*num);
   CRYPTO_ofb128_encrypt(in, out, length, key, ivec, &num_u,
@@ -102,7 +102,7 @@ void AES_ofb128_encrypt(const uint8_t *in, uint8_t *out, size_t length,
   *num = (int)num_u;
 }
 
-void AES_cfb128_encrypt(const uint8_t *in, uint8_t *out, size_t length,
+void OPENSSL_CDECL AES_cfb128_encrypt(const uint8_t *in, uint8_t *out, size_t length,
                         const AES_KEY *key, uint8_t *ivec, int *num,
                         int enc) {
   unsigned num_u = (unsigned)(*num);

@@ -51,7 +51,8 @@
   DEFINE_BSS_GET(type, name##_storage)                                        \
   DEFINE_STATIC_ONCE(name##_once)                                             \
   static void name##_do_init(type *out);                                      \
-  static void name##_init(void) { name##_do_init(name##_storage_bss_get()); } \
+  static void OPENSSL_CDECL name##_init(void) {                               \
+    name##_do_init(name##_storage_bss_get()); }                               \
   accessor_decorations type *name(void) {                                     \
     CRYPTO_once(name##_once_bss_get(), name##_init);                          \
     /* See http://c-faq.com/ansi/constmismatch.html for why the following     \

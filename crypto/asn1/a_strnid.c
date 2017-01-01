@@ -194,13 +194,13 @@ static const ASN1_STRING_TABLE tbl_standard[] = {
     {NID_ms_csp_name, -1, -1, B_ASN1_BMPSTRING, STABLE_NO_MASK}
 };
 
-static int sk_table_cmp(const ASN1_STRING_TABLE **a,
+static int OPENSSL_CDECL sk_table_cmp(const ASN1_STRING_TABLE **a,
                         const ASN1_STRING_TABLE **b)
 {
     return (*a)->nid - (*b)->nid;
 }
 
-static int table_cmp(const void *in_a, const void *in_b)
+static int OPENSSL_CDECL table_cmp(const void *in_a, const void *in_b)
 {
     const ASN1_STRING_TABLE *a = in_a;
     const ASN1_STRING_TABLE *b = in_b;

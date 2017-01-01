@@ -407,7 +407,7 @@ typedef struct {
     ASN1_VALUE *field;
 } DER_ENC;
 
-static int der_cmp(const void *a, const void *b)
+static int OPENSSL_CDECL der_cmp(const void *a, const void *b)
 {
     const DER_ENC *d1 = a, *d2 = b;
     int cmplen, i;

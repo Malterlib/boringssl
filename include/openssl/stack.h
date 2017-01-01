@@ -90,7 +90,7 @@ extern "C" {
 // if |*a| is less than, equal to or greater than |*b|, respectively.  Note the
 // extra indirection - the function is given a pointer to a pointer to the
 // element. This differs from the usual qsort/bsearch comparison function.
-typedef int (*stack_cmp_func)(const void **a, const void **b);
+typedef int (OPENSSL_CDECL *stack_cmp_func)(const void **a, const void **b);
 
 // stack_st contains an array of pointers. It is not designed to be used
 // directly, rather the wrapper macros should be used.
@@ -247,7 +247,8 @@ struct StackTraits {};
 #define BORINGSSL_DEFINE_STACK_OF_IMPL(name, ptrtype, constptrtype)            \
   DECLARE_STACK_OF(name)                                                       \
                                                                                \
-  typedef int (*stack_##name##_cmp_func)(constptrtype *a, constptrtype *b);    \
+  typedef int (OPENSSL_CDECL *stack_##name##_cmp_func)(constptrtype *a,        \
+                constptrtype *b);                                              \
                                                                                \
   static inline OPENSSL_UNUSED STACK_OF(name) *                                \
       sk_##name##_new(stack_##name##_cmp_func comp) {                          \

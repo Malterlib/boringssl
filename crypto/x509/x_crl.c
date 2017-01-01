@@ -85,7 +85,7 @@ struct x509_crl_method_st {
     int (*crl_verify) (X509_CRL *crl, EVP_PKEY *pk);
 };
 
-static int X509_REVOKED_cmp(const X509_REVOKED **a, const X509_REVOKED **b);
+static int OPENSSL_CDECL X509_REVOKED_cmp(const X509_REVOKED **a, const X509_REVOKED **b);
 static void setup_idp(X509_CRL *crl, ISSUING_DIST_POINT *idp);
 
 ASN1_SEQUENCE(X509_REVOKED) = {
@@ -369,7 +369,7 @@ IMPLEMENT_ASN1_FUNCTIONS(X509_CRL_INFO)
 IMPLEMENT_ASN1_FUNCTIONS(X509_CRL)
 IMPLEMENT_ASN1_DUP_FUNCTION(X509_CRL)
 
-static int X509_REVOKED_cmp(const X509_REVOKED **a, const X509_REVOKED **b)
+static int OPENSSL_CDECL X509_REVOKED_cmp(const X509_REVOKED **a, const X509_REVOKED **b)
 {
     return (ASN1_STRING_cmp((ASN1_STRING *)(*a)->serialNumber,
                             (ASN1_STRING *)(*b)->serialNumber));
