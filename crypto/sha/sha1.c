@@ -130,7 +130,7 @@ uint8_t *SHA1(const uint8_t *data, size_t len, uint8_t *out) {
 #ifndef SHA1_ASM
 static
 #endif
-void sha1_block_data_order(uint32_t *state, const uint8_t *data, size_t num);
+void OPENSSL_CDECL sha1_block_data_order(uint32_t *state, const uint8_t *data, size_t num);
 
 #include "../digest/md32_common.h"
 
@@ -204,7 +204,7 @@ void sha1_block_data_order(uint32_t *state, const uint8_t *data, size_t num);
 #define X(i)	XX##i
 
 #if !defined(SHA1_ASM)
-static void sha1_block_data_order(uint32_t *state, const uint8_t *data,
+static void OPENSSL_CDECL sha1_block_data_order(uint32_t *state, const uint8_t *data,
                                   size_t num) {
   register uint32_t A, B, C, D, E, T, l;
   uint32_t XX0, XX1, XX2, XX3, XX4, XX5, XX6, XX7, XX8, XX9, XX10,

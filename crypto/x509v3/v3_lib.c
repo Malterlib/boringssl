@@ -92,7 +92,7 @@ int X509V3_EXT_add(X509V3_EXT_METHOD *ext)
     return 1;
 }
 
-static int ext_cmp(const void *void_a, const void *void_b)
+static int OPENSSL_CDECL ext_cmp(const void *void_a, const void *void_b)
 {
     const X509V3_EXT_METHOD **a = (const X509V3_EXT_METHOD **)void_a;
     const X509V3_EXT_METHOD **b = (const X509V3_EXT_METHOD **)void_b;

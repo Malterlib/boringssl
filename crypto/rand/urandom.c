@@ -114,7 +114,7 @@ static CRYPTO_once_t once = CRYPTO_ONCE_INIT;
  * requested. This is the only function that modifies |urandom_fd| and
  * |urandom_buffering|, whose values may be read safely after calling the
  * once. */
-static void init_once(void) {
+static void  OPENSSL_CDECL init_once(void) {
   CRYPTO_STATIC_MUTEX_lock_read(&requested_lock);
   urandom_buffering = urandom_buffering_requested;
   int fd = urandom_fd_requested;

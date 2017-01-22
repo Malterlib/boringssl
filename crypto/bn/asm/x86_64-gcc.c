@@ -97,7 +97,7 @@
 #undef sqr
 #define sqr(r0, r1, a) asm("mulq %2" : "=a"(r0), "=d"(r1) : "a"(a) : "cc");
 
-BN_ULONG bn_mul_add_words(BN_ULONG *rp, const BN_ULONG *ap, int num,
+BN_ULONG OPENSSL_CDECL bn_mul_add_words(BN_ULONG *rp, const BN_ULONG *ap, int num,
                           BN_ULONG w) {
   BN_ULONG c1 = 0;
 
@@ -130,7 +130,7 @@ BN_ULONG bn_mul_add_words(BN_ULONG *rp, const BN_ULONG *ap, int num,
   return c1;
 }
 
-BN_ULONG bn_mul_words(BN_ULONG *rp, const BN_ULONG *ap, int num, BN_ULONG w) {
+BN_ULONG OPENSSL_CDECL bn_mul_words(BN_ULONG *rp, const BN_ULONG *ap, int num, BN_ULONG w) {
   BN_ULONG c1 = 0;
 
   if (num <= 0) {
@@ -160,7 +160,7 @@ BN_ULONG bn_mul_words(BN_ULONG *rp, const BN_ULONG *ap, int num, BN_ULONG w) {
   return c1;
 }
 
-void bn_sqr_words(BN_ULONG *r, const BN_ULONG *a, int n) {
+void OPENSSL_CDECL bn_sqr_words(BN_ULONG *r, const BN_ULONG *a, int n) {
   if (n <= 0) {
     return;
   }
@@ -187,7 +187,7 @@ void bn_sqr_words(BN_ULONG *r, const BN_ULONG *a, int n) {
   }
 }
 
-BN_ULONG bn_add_words(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,
+BN_ULONG OPENSSL_CDECL bn_add_words(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,
                       int n) {
   BN_ULONG ret;
   size_t i = 0;
@@ -213,7 +213,7 @@ BN_ULONG bn_add_words(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,
   return ret & 1;
 }
 
-BN_ULONG bn_sub_words(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,
+BN_ULONG OPENSSL_CDECL bn_sub_words(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,
                       int n) {
   BN_ULONG ret;
   size_t i = 0;
@@ -283,7 +283,7 @@ BN_ULONG bn_sub_words(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,
 
 #define sqr_add_c2(a, i, j, c0, c1, c2) mul_add_c2((a)[i], (a)[j], c0, c1, c2)
 
-void bn_mul_comba8(BN_ULONG *r, BN_ULONG *a, BN_ULONG *b) {
+void OPENSSL_CDECL bn_mul_comba8(BN_ULONG *r, BN_ULONG *a, BN_ULONG *b) {
   BN_ULONG c1, c2, c3;
 
   c1 = 0;
@@ -385,7 +385,7 @@ void bn_mul_comba8(BN_ULONG *r, BN_ULONG *a, BN_ULONG *b) {
   r[15] = c1;
 }
 
-void bn_mul_comba4(BN_ULONG *r, BN_ULONG *a, BN_ULONG *b) {
+void OPENSSL_CDECL bn_mul_comba4(BN_ULONG *r, BN_ULONG *a, BN_ULONG *b) {
   BN_ULONG c1, c2, c3;
 
   c1 = 0;
@@ -423,7 +423,7 @@ void bn_mul_comba4(BN_ULONG *r, BN_ULONG *a, BN_ULONG *b) {
   r[7] = c2;
 }
 
-void bn_sqr_comba8(BN_ULONG *r, const BN_ULONG *a) {
+void OPENSSL_CDECL bn_sqr_comba8(BN_ULONG *r, const BN_ULONG *a) {
   BN_ULONG c1, c2, c3;
 
   c1 = 0;
@@ -497,7 +497,7 @@ void bn_sqr_comba8(BN_ULONG *r, const BN_ULONG *a) {
   r[15] = c1;
 }
 
-void bn_sqr_comba4(BN_ULONG *r, const BN_ULONG *a) {
+void OPENSSL_CDECL bn_sqr_comba4(BN_ULONG *r, const BN_ULONG *a) {
   BN_ULONG c1, c2, c3;
 
   c1 = 0;

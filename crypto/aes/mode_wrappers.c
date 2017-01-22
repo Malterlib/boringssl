@@ -85,7 +85,7 @@ void AES_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t len,
 }
 #else
 
-void asm_AES_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t len,
+void OPENSSL_CDECL asm_AES_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t len,
                          const AES_KEY *key, uint8_t *ivec, const int enc);
 void AES_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t len,
                      const AES_KEY *key, uint8_t *ivec, const int enc) {

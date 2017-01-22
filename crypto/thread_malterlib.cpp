@@ -35,7 +35,7 @@ struct CInitOnce {
 
 static_assert(sizeof(CRYPTO_once_t) >= sizeof(CInitOnce), "Incorrect size");
 
-void CRYPTO_once(CRYPTO_once_t *once, void (*init)(void)) {
+void CRYPTO_once(CRYPTO_once_t *once, void (OPENSSL_CDECL * init)(void)) {
   CInitOnce *pInit = fg_AutoReinterpretCast(once);
   DLock(pInit->m_Lock);
   if (!pInit->m_bInited) {

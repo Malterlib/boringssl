@@ -197,7 +197,7 @@ static int sk_table_cmp(const ASN1_STRING_TABLE **a,
     return (*a)->nid - (*b)->nid;
 }
 
-static int table_cmp(const void *in_a, const void *in_b)
+static int OPENSSL_CDECL table_cmp(const void *in_a, const void *in_b)
 {
     const ASN1_STRING_TABLE *a = in_a;
     const ASN1_STRING_TABLE *b = in_b;

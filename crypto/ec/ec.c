@@ -275,7 +275,7 @@ static const BN_MONT_CTX **built_in_curve_scalar_field_monts;
 
 static CRYPTO_once_t built_in_curve_scalar_field_monts_once;
 
-static void built_in_curve_scalar_field_monts_init(void) {
+static void OPENSSL_CDECL built_in_curve_scalar_field_monts_init(void) {
   unsigned num_built_in_curves;
   for (num_built_in_curves = 0;; num_built_in_curves++) {
     if (OPENSSL_built_in_curves[num_built_in_curves].nid == NID_undef) {

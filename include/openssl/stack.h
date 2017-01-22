@@ -90,7 +90,7 @@ extern "C" {
  * if |*a| is less than, equal to or greater than |*b|, respectively.  Note the
  * extra indirection - the function is given a pointer to a pointer to the
  * element. This differs from the usual qsort/bsearch comparison function. */
-typedef int (*stack_cmp_func)(const void **a, const void **b);
+typedef int (OPENSSL_CDECL *stack_cmp_func)(const void **a, const void **b);
 
 /* stack_st contains an array of pointers. It is not designed to be used
  * directly, rather the wrapper macros should be used. */

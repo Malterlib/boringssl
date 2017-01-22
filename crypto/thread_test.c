@@ -77,7 +77,7 @@ static int wait_for_thread(thread_t thread) {
 
 static unsigned g_once_init_called = 0;
 
-static void once_init(void) {
+static void OPENSSL_CDECL once_init(void) {
   g_once_init_called++;
 
   /* Sleep briefly so one |call_once_thread| instance will call |CRYPTO_once|

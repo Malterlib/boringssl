@@ -326,7 +326,7 @@ int X509_PURPOSE_get_trust(X509_PURPOSE *xp)
     return xp->trust;
 }
 
-static int nid_cmp(const void *void_a, const void *void_b)
+static int OPENSSL_CDECL nid_cmp(const void *void_a, const void *void_b)
 {
     const int *a = void_a, *b = void_b;
 

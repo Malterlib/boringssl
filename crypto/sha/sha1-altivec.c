@@ -69,7 +69,7 @@
 
 #include <altivec.h>
 
-void sha1_block_data_order(uint32_t *state, const uint8_t *data, size_t num);
+void OPENSSL_CDECL sha1_block_data_order(uint32_t *state, const uint8_t *data, size_t num);
 
 static uint32_t rotate(uint32_t a, int n) { return (a << n) | (a >> (32 - n)); }
 
@@ -185,7 +185,7 @@ static vec_uint32_t sched_32_79(vec_uint32_t *pre_added, vec_uint32_t minus_4,
     (b) = rotate((b), 30);                                      \
   } while (0)
 
-void sha1_block_data_order(uint32_t *state, const uint8_t *data, size_t num) {
+void OPENSSL_CDECL sha1_block_data_order(uint32_t *state, const uint8_t *data, size_t num) {
   uint32_t A, B, C, D, E, T;
 
   A = state[0];

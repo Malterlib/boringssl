@@ -113,11 +113,11 @@ extern "C" {
 #if defined(_WIN32)
 #define OPENSSL_WINDOWS
 // Incompatibility with wincrypt.h
-#undef X509_NAME 
-#undef X509_EXTENSIONS 
-#undef PKCS7_ISSUER_AND_SERIAL 
-#undef OCSP_REQUEST 
-#undef OCSP_RESPONSE 
+#undef X509_NAME
+#undef X509_EXTENSIONS
+#undef PKCS7_ISSUER_AND_SERIAL
+#undef OCSP_REQUEST
+#undef OCSP_RESPONSE
 #undef X509_CERT_PAIR
 #endif
 
@@ -191,6 +191,13 @@ extern "C" {
 #endif
 #else
 #define OPENSSL_PRINTF_FORMAT_FUNC(string_index, first_to_check)
+#endif
+
+// For compatibility compiling with fastcall x86 as default calling convention
+#if defined(_MSC_VER)
+#define OPENSSL_CDECL __cdecl
+#else
+#define OPENSSL_CDECL 
 #endif
 
 /* OPENSSL_MSVC_PRAGMA emits a pragma on MSVC and nothing on other compilers. */

@@ -33,7 +33,7 @@
      defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64))
 
 /* ChaCha20_ctr32 is defined in asm/chacha-*.pl. */
-void ChaCha20_ctr32(uint8_t *out, const uint8_t *in, size_t in_len,
+void OPENSSL_CDECL ChaCha20_ctr32(uint8_t *out, const uint8_t *in, size_t in_len,
                     const uint32_t key[8], const uint32_t counter[4]);
 
 void CRYPTO_chacha_20(uint8_t *out, const uint8_t *in, size_t in_len,
