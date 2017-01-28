@@ -67,7 +67,7 @@ extern "C" {
 
 #if defined(DMalterlib)
 typedef struct crypto_mutex_st {
-  size_t Data[9];
+  size_t Data[11];
 } CRYPTO_MUTEX;
 #elif defined(OPENSSL_NO_THREADS)
 typedef struct crypto_mutex_st {

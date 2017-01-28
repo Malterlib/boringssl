@@ -23,10 +23,66 @@
 #include <openssl/mem.h>
 #include <openssl/type_check.h>
 
-using CStaticLock = TCAggregate<CMutualManyRead, 128, CSpinLockAggregate>;
+namespace {
+  struct CMalterlibLock : public CMutualManyRead {
+    CMalterlibLock();
+    ~CMalterlibLock();
+    
+    DLinkDS_Link(CMalterlibLock, m_Link);
+  };
+
+  struct CSubSystem_BoringSSL : public CSubSystem {
+    void f_PrepareFork() override {
+      m_Lock.f_Lock();
+      m_Lock.f_PrepareFork();
+      for (auto &Mutex : m_Mutexes) {
+        Mutex.f_Lock();
+        Mutex.f_PrepareFork();
+      }
+    }
+    
+    void f_ForkedParent() override {
+      for (auto &Mutex : m_Mutexes) {
+        Mutex.f_ForkedParent();
+        Mutex.f_Unlock();
+      }
+      m_Lock.f_ForkedParent();
+      m_Lock.f_Unlock();
+    }
+    
+    void f_ForkedChild() override {
+      for (auto &Mutex : m_Mutexes) {
+        Mutex.f_ForkedChild();
+        Mutex.f_Unlock();
+      }
+      m_Lock.f_ForkedChild();
+      m_Lock.f_Unlock();
+    }
+    
+    CMutual m_Lock;
+    DLinkDS_List(CMalterlibLock, m_Link) m_Mutexes;
+  };
+  
+  TCSubSystem<CSubSystem_BoringSSL, ESubSystemDestruction_BeforeMemoryManager> 
+    g_SubSystem_BoringSSL = {DAggregateInit};
+
+  CMalterlibLock::CMalterlibLock() {
+    auto &SubSystem = *g_SubSystem_BoringSSL;
+    DLock(SubSystem.m_Lock);
+    SubSystem.m_Mutexes.f_Insert(this);
+  }
+  
+  CMalterlibLock::~CMalterlibLock() {
+    auto &SubSystem = *g_SubSystem_BoringSSL;
+    DLock(SubSystem.m_Lock);
+    SubSystem.m_Mutexes.f_Remove(this);
+  }
+}
+
+using CStaticLock = TCAggregate<CMalterlibLock, 128, CSpinLockAggregate>;
 
 static_assert(sizeof(CRYPTO_STATIC_MUTEX) >= sizeof(CStaticLock), "Incorrect size");
-static_assert(sizeof(CRYPTO_MUTEX) >= sizeof(CMutualManyRead), "Incorrect size");
+static_assert(sizeof(CRYPTO_MUTEX) >= sizeof(CMalterlibLock), "Incorrect size");
 
 struct CInitOnce {
   CSpinLockAggregate m_Lock;
@@ -45,32 +101,32 @@ void CRYPTO_once(CRYPTO_once_t *once, void (OPENSSL_CDECL * init)(void)) {
 }
 
 void CRYPTO_MUTEX_init(CRYPTO_MUTEX *lock) {
-  new ((void *)lock) CMutualManyRead();
+  new ((void *)lock) CMalterlibLock();
 }
 
 void CRYPTO_MUTEX_lock_read(CRYPTO_MUTEX *lock) {
-  CMutualManyRead *pLock = fg_AutoReinterpretCast(lock);
+  CMalterlibLock *pLock = fg_AutoReinterpretCast(lock);
   pLock->f_LockRead();
 }
 
 void CRYPTO_MUTEX_lock_write(CRYPTO_MUTEX *lock) {
-  CMutualManyRead *pLock = fg_AutoReinterpretCast(lock);
+  CMalterlibLock *pLock = fg_AutoReinterpretCast(lock);
   pLock->f_Lock();
 }
 
 void CRYPTO_MUTEX_unlock_read(CRYPTO_MUTEX *lock) {
-  CMutualManyRead *pLock = fg_AutoReinterpretCast(lock);
+  CMalterlibLock *pLock = fg_AutoReinterpretCast(lock);
   pLock->f_UnlockRead();
 }
 
 void CRYPTO_MUTEX_unlock_write(CRYPTO_MUTEX *lock) {
-  CMutualManyRead *pLock = fg_AutoReinterpretCast(lock);
+  CMalterlibLock *pLock = fg_AutoReinterpretCast(lock);
   pLock->f_Unlock();
 }
 
 void CRYPTO_MUTEX_cleanup(CRYPTO_MUTEX *lock) {
-  CMutualManyRead *pLock = fg_AutoReinterpretCast(lock);
-  pLock->~CMutualManyRead();
+  CMalterlibLock *pLock = fg_AutoReinterpretCast(lock);
+  pLock->~CMalterlibLock();
 }
 
 void CRYPTO_STATIC_MUTEX_lock_read(struct CRYPTO_STATIC_MUTEX *lock) {
@@ -105,7 +161,8 @@ struct COpenSSLThreadLocals {
   }
 };
 
-TCAggregate<TCThreadLocal<COpenSSLThreadLocals>> g_OpenSSLThreadLocals = {DAggregateInit};
+TCAggregate<TCThreadLocal<COpenSSLThreadLocals>> 
+  g_OpenSSLThreadLocals = {DAggregateInit};
 
 void *CRYPTO_get_thread_local(thread_local_data_t index) {
   auto &ThreadLocals = **g_OpenSSLThreadLocals;

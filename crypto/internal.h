@@ -392,7 +392,7 @@ struct CRYPTO_STATIC_MUTEX {
 #define CRYPTO_STATIC_MUTEX_INIT { PTHREAD_RWLOCK_INITIALIZER }
 #elif defined(OPENSSL_MALTERLIB_THREADS)
 struct CRYPTO_STATIC_MUTEX {
-  size_t data[20];
+  size_t data[22];
 };
 #define CRYPTO_STATIC_MUTEX_INIT { 0 }
 #else
