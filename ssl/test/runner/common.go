@@ -100,7 +100,6 @@ const (
 	extensionNextProtoNeg               uint16 = 13172 // not IANA assigned
 	extensionRenegotiationInfo          uint16 = 0xff01
 	extensionChannelID                  uint16 = 30032 // not IANA assigned
-	extensionShortHeader                uint16 = 27463 // not IANA assigned
 )
 
 // TLS signaling cipher suite values
@@ -223,7 +222,6 @@ type ConnectionState struct {
 	SCTList                    []byte                // signed certificate timestamp list
 	PeerSignatureAlgorithm     signatureAlgorithm    // algorithm used by the peer in the handshake
 	CurveID                    CurveID               // the curve used in ECDHE
-	ShortHeader                bool                  // whether the short header extension was negotiated
 }
 
 // ClientAuthType declares the policy the server will follow for
@@ -254,6 +252,7 @@ type ClientSessionState struct {
 	ticketCreationTime   time.Time
 	ticketExpiration     time.Time
 	ticketAgeAdd         uint32
+	maxEarlyDataSize     uint32
 }
 
 // ClientSessionCache is a cache of ClientSessionState objects that can be used
@@ -412,6 +411,13 @@ type Config struct {
 	// PreSharedKeyIdentity, if not empty, is the identity to use
 	// with the PSK cipher suites.
 	PreSharedKeyIdentity string
+
+	// MaxEarlyDataSize controls the maximum number of bytes that the
+	// server will accept in early data and advertise in a
+	// NewSessionTicketMsg. If 0, no early data will be accepted and
+	// the TicketEarlyDataInfo extension in the NewSessionTicketMsg
+	// will be omitted.
+	MaxEarlyDataSize uint32
 
 	// SRTPProtectionProfiles, if not nil, is the list of SRTP
 	// protection profiles to offer in DTLS-SRTP.
@@ -660,9 +666,16 @@ type ProtocolBugs struct {
 	// ticket before sending it in a resume handshake.
 	FilterTicket func([]byte) ([]byte, error)
 
-	// OversizedSessionId causes the session id that is sent with a ticket
-	// resumption attempt to be too large (33 bytes).
-	OversizedSessionId bool
+	// TicketSessionIDLength, if non-zero, is the length of the session ID
+	// to send with a ticket resumption offer.
+	TicketSessionIDLength int
+
+	// EmptyTicketSessionID, if true, causes the client to send an empty
+	// session ID with a ticket resumption offer. For simplicity, this will
+	// also cause the client to interpret a ServerHello with empty session
+	// ID as a resumption. (A client which sends empty session ID is
+	// normally expected to look ahead for ChangeCipherSpec.)
+	EmptyTicketSessionID bool
 
 	// ExpectNoTLS12Session, if true, causes the server to fail the
 	// connection if either a session ID or TLS 1.2 ticket is offered.
@@ -955,11 +968,6 @@ type ProtocolBugs struct {
 	// receipt of a NewSessionTicket message.
 	ExpectNoNewSessionTicket bool
 
-	// SendTicketEarlyDataInfo, if non-zero, is the maximum amount of data that we
-	// will accept as early data, and gets sent in the ticket_early_data_info
-	// extension of the NewSessionTicket message.
-	SendTicketEarlyDataInfo uint32
-
 	// DuplicateTicketEarlyDataInfo causes an extra empty extension of
 	// ticket_early_data_info to be sent in NewSessionTicket.
 	DuplicateTicketEarlyDataInfo bool
@@ -971,6 +979,10 @@ type ProtocolBugs struct {
 	// ExpectTicketAge, if non-zero, is the expected age of the ticket that the
 	// server receives from the client.
 	ExpectTicketAge time.Duration
+
+	// SendTicketAge, if non-zero, is the ticket age to be sent by the
+	// client.
+	SendTicketAge time.Duration
 
 	// FailIfSessionOffered, if true, causes the server to fail any
 	// connections where the client offers a non-empty session ID or session
@@ -1116,9 +1128,9 @@ type ProtocolBugs struct {
 	// SendEarlyAlert, if true, sends a fatal alert after the ClientHello.
 	SendEarlyAlert bool
 
-	// SendEarlyDataLength, if non-zero, is the amount of early data to send after
-	// the ClientHello.
-	SendEarlyDataLength int
+	// SendFakeEarlyDataLength, if non-zero, is the amount of early data to
+	// send after the ClientHello.
+	SendFakeEarlyDataLength int
 
 	// OmitEarlyDataExtension, if true, causes the early data extension to
 	// be omitted in the ClientHello.
@@ -1131,6 +1143,33 @@ type ProtocolBugs struct {
 	// InterleaveEarlyData, if true, causes the TLS 1.3 client to send early
 	// data interleaved with the second ClientHello and the client Finished.
 	InterleaveEarlyData bool
+
+	// SendEarlyData causes a TLS 1.3 client to send the provided data
+	// in application data records immediately after the ClientHello,
+	// provided that the client has a PSK that is appropriate for sending
+	// early data and includes that PSK in its ClientHello.
+	SendEarlyData [][]byte
+
+	// ExpectEarlyData causes a TLS 1.3 server to read application
+	// data after the ClientHello (assuming the server is able to
+	// derive the key under which the data is encrypted) before it
+	// sends a ServerHello. It checks that the application data it
+	// reads matches what is provided in ExpectEarlyData and errors if
+	// the number of records or their content do not match.
+	ExpectEarlyData [][]byte
+
+	// SendHalfRTTData causes a TLS 1.3 server to send the provided
+	// data in application data records before reading the client's
+	// Finished message.
+	SendHalfRTTData [][]byte
+
+	// ExpectHalfRTTData causes a TLS 1.3 client to read application
+	// data after reading the server's Finished message and before
+	// sending any other handshake messages. It checks that the
+	// application data it reads matches what is provided in
+	// ExpectHalfRTTData and errors if the number of records or their
+	// content do not match.
+	ExpectHalfRTTData [][]byte
 
 	// EmptyEncryptedExtensions, if true, causes the TLS 1.3 server to
 	// emit an empty EncryptedExtensions block.
@@ -1237,18 +1276,6 @@ type ProtocolBugs struct {
 	// request signed certificate timestamps.
 	NoSignedCertificateTimestamps bool
 
-	// EnableShortHeader, if true, causes the TLS 1.3 short header extension
-	// to be enabled.
-	EnableShortHeader bool
-
-	// AlwaysNegotiateShortHeader, if true, causes the server to always
-	// negotiate the short header extension in ServerHello.
-	AlwaysNegotiateShortHeader bool
-
-	// ClearShortHeaderBit, if true, causes the server to send short headers
-	// without the high bit set.
-	ClearShortHeaderBit bool
-
 	// SendSupportedPointFormats, if not nil, is the list of supported point
 	// formats to send in ClientHello or ServerHello. If set to a non-nil
 	// empty slice, no extension will be sent.
@@ -1257,6 +1284,22 @@ type ProtocolBugs struct {
 	// MaxReceivePlaintext, if non-zero, is the maximum plaintext record
 	// length accepted from the peer.
 	MaxReceivePlaintext int
+
+	// SendTicketLifetime, if non-zero, is the ticket lifetime to send in
+	// NewSessionTicket messages.
+	SendTicketLifetime time.Duration
+
+	// SendServerNameAck, if true, causes the server to acknowledge the SNI
+	// extension.
+	SendServerNameAck bool
+
+	// ExpectCertificateReqNames, if not nil, contains the list of X.509
+	// names that must be sent in a CertificateRequest from the server.
+	ExpectCertificateReqNames [][]byte
+
+	// RenegotiationCertificate, if not nil, is the certificate to use on
+	// renegotiation handshakes.
+	RenegotiationCertificate *Certificate
 }
 
 func (c *Config) serverInit() {

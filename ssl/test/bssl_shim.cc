@@ -191,6 +191,100 @@ static bssl::UniquePtr<EVP_PKEY> LoadPrivateKey(const std::string &file) {
       PEM_read_bio_PrivateKey(bio.get(), NULL, NULL, NULL));
 }
 
+static bool FromHexDigit(uint8_t *out, char c) {
+  if ('0' <= c && c <= '9') {
+    *out = c - '0';
+    return true;
+  }
+  if ('a' <= c && c <= 'f') {
+    *out = c - 'a' + 10;
+    return true;
+  }
+  if ('A' <= c && c <= 'F') {
+    *out = c - 'A' + 10;
+    return true;
+  }
+  return false;
+}
+
+static bool HexDecode(std::string *out, const std::string &in) {
+  if ((in.size() & 1) != 0) {
+    return false;
+  }
+
+  std::unique_ptr<uint8_t[]> buf(new uint8_t[in.size() / 2]);
+  for (size_t i = 0; i < in.size() / 2; i++) {
+    uint8_t high, low;
+    if (!FromHexDigit(&high, in[i*2]) ||
+        !FromHexDigit(&low, in[i*2+1])) {
+      return false;
+    }
+    buf[i] = (high << 4) | low;
+  }
+
+  out->assign(reinterpret_cast<const char *>(buf.get()), in.size() / 2);
+  return true;
+}
+
+static std::vector<std::string> SplitParts(const std::string &in,
+                                           const char delim) {
+  std::vector<std::string> ret;
+  size_t start = 0;
+
+  for (size_t i = 0; i < in.size(); i++) {
+    if (in[i] == delim) {
+      ret.push_back(in.substr(start, i - start));
+      start = i + 1;
+    }
+  }
+
+  ret.push_back(in.substr(start, std::string::npos));
+  return ret;
+}
+
+static std::vector<std::string> DecodeHexStrings(
+    const std::string &hex_strings) {
+  std::vector<std::string> ret;
+  const std::vector<std::string> parts = SplitParts(hex_strings, ',');
+
+  for (const auto &part : parts) {
+    std::string binary;
+    if (!HexDecode(&binary, part)) {
+      fprintf(stderr, "Bad hex string: %s\n", part.c_str());
+      return ret;
+    }
+
+    ret.push_back(binary);
+  }
+
+  return ret;
+}
+
+static bssl::UniquePtr<STACK_OF(X509_NAME)> DecodeHexX509Names(
+    const std::string &hex_names) {
+  const std::vector<std::string> der_names = DecodeHexStrings(hex_names);
+  bssl::UniquePtr<STACK_OF(X509_NAME)> ret(sk_X509_NAME_new_null());
+
+  for (const auto &der_name : der_names) {
+    const uint8_t *const data =
+        reinterpret_cast<const uint8_t *>(der_name.data());
+    const uint8_t *derp = data;
+    bssl::UniquePtr<X509_NAME> name(
+        d2i_X509_NAME(nullptr, &derp, der_name.size()));
+    if (!name || derp != data + der_name.size()) {
+      fprintf(stderr, "Failed to parse X509_NAME.\n");
+      return nullptr;
+    }
+
+    if (!sk_X509_NAME_push(ret.get(), name.get())) {
+      return nullptr;
+    }
+    name.release();
+  }
+
+  return ret;
+}
+
 static int AsyncPrivateKeyType(SSL *ssl) {
   EVP_PKEY *key = GetTestState(ssl)->private_key.get();
   switch (EVP_PKEY_id(key)) {
@@ -509,7 +603,39 @@ static bool CheckCertificateRequest(SSL *ssl) {
     }
   }
 
-  // TODO(davidben): Test |SSL_get_client_CA_list|.
+  if (!config->expected_client_ca_list.empty()) {
+    bssl::UniquePtr<STACK_OF(X509_NAME)> expected =
+        DecodeHexX509Names(config->expected_client_ca_list);
+    const size_t num_expected = sk_X509_NAME_num(expected.get());
+
+    const STACK_OF(X509_NAME) *received = SSL_get_client_CA_list(ssl);
+    const size_t num_received = sk_X509_NAME_num(received);
+
+    if (num_received != num_expected) {
+      fprintf(stderr, "expected %u names in CertificateRequest but got %u\n",
+              static_cast<unsigned>(num_expected),
+              static_cast<unsigned>(num_received));
+      return false;
+    }
+
+    for (size_t i = 0; i < num_received; i++) {
+      if (X509_NAME_cmp(sk_X509_NAME_value(received, i),
+                        sk_X509_NAME_value(expected.get(), i)) != 0) {
+        fprintf(stderr, "names in CertificateRequest differ at index #%d\n",
+                static_cast<unsigned>(i));
+        return false;
+      }
+    }
+
+    STACK_OF(CRYPTO_BUFFER) *buffers = SSL_get0_server_requested_CAs(ssl);
+    if (sk_CRYPTO_BUFFER_num(buffers) != num_received) {
+      fprintf(stderr,
+              "Mismatch between SSL_get_server_requested_CAs and "
+              "SSL_get_client_CA_list.\n");
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -927,7 +1053,7 @@ static bssl::UniquePtr<SSL_CTX> SetupCtx(const TestConfig *config) {
     cipher_list = config->cipher;
     SSL_CTX_set_options(ssl_ctx.get(), SSL_OP_CIPHER_SERVER_PREFERENCE);
   }
-  if (!SSL_CTX_set_cipher_list(ssl_ctx.get(), cipher_list.c_str())) {
+  if (!SSL_CTX_set_strict_cipher_list(ssl_ctx.get(), cipher_list.c_str())) {
     return nullptr;
   }
 
@@ -1026,8 +1152,14 @@ static bssl::UniquePtr<SSL_CTX> SetupCtx(const TestConfig *config) {
     return nullptr;
   }
 
-  if (config->use_null_client_ca_list) {
-    SSL_CTX_set_client_CA_list(ssl_ctx.get(), nullptr);
+  if (!config->use_client_ca_list.empty()) {
+    if (config->use_client_ca_list == "<NULL>") {
+      SSL_CTX_set_client_CA_list(ssl_ctx.get(), nullptr);
+    } else {
+      bssl::UniquePtr<STACK_OF(X509_NAME)> names =
+          DecodeHexX509Names(config->use_client_ca_list);
+      SSL_CTX_set_client_CA_list(ssl_ctx.get(), names.release());
+    }
   }
 
   if (config->enable_grease) {
@@ -1042,10 +1174,6 @@ static bssl::UniquePtr<SSL_CTX> SetupCtx(const TestConfig *config) {
       !SSL_CTX_set_tlsext_ticket_keys(ssl_ctx.get(), config->ticket_key.data(),
                                       config->ticket_key.size())) {
     return nullptr;
-  }
-
-  if (config->enable_short_header) {
-    SSL_CTX_set_short_header_enabled(ssl_ctx.get(), 1);
   }
 
   if (config->enable_early_data) {
@@ -1250,6 +1378,17 @@ static bool CheckHandshakeProperties(SSL *ssl, bool is_resume) {
       fprintf(stderr,
               "new session was%s cached, but we expected the opposite\n",
               GetTestState(ssl)->got_new_session ? "" : " not");
+      return false;
+    }
+  }
+
+  if (!is_resume) {
+    if (config->expect_session_id && !GetTestState(ssl)->got_new_session) {
+      fprintf(stderr, "session was not cached on the server.\n");
+      return false;
+    }
+    if (config->expect_no_session_id && GetTestState(ssl)->got_new_session) {
+      fprintf(stderr, "session was unexpectedly cached on the server.\n");
       return false;
     }
   }
@@ -1466,9 +1605,16 @@ static bool CheckHandshakeProperties(SSL *ssl, bool is_resume) {
   }
 
   if (expected_sha256_client_cert &&
-      SSL_get_session(ssl)->x509_peer != nullptr) {
+      SSL_get_session(ssl)->certs != nullptr) {
     fprintf(stderr, "Have both client cert and SHA-256 hash: is_resume:%d.\n",
             is_resume);
+    return false;
+  }
+
+  if (is_resume && config->expect_ticket_age_skew != 0 &&
+      SSL_get_ticket_age_skew(ssl) != config->expect_ticket_age_skew) {
+    fprintf(stderr, "Ticket age skew was %" PRId32 ", wanted %d\n",
+            SSL_get_ticket_age_skew(ssl), config->expect_ticket_age_skew);
     return false;
   }
 
@@ -1573,13 +1719,11 @@ static bool DoExchange(bssl::UniquePtr<SSL_SESSION> *out_session,
       !SSL_set_srtp_profiles(ssl.get(), config->srtp_profiles.c_str())) {
     return false;
   }
-  if (config->enable_ocsp_stapling &&
-      !SSL_enable_ocsp_stapling(ssl.get())) {
-    return false;
+  if (config->enable_ocsp_stapling) {
+    SSL_enable_ocsp_stapling(ssl.get());
   }
-  if (config->enable_signed_cert_timestamps &&
-      !SSL_enable_signed_cert_timestamps(ssl.get())) {
-    return false;
+  if (config->enable_signed_cert_timestamps) {
+    SSL_enable_signed_cert_timestamps(ssl.get());
   }
   if (config->min_version != 0 &&
       !SSL_set_min_proto_version(ssl.get(), (uint16_t)config->min_version)) {
@@ -1651,7 +1795,7 @@ static bool DoExchange(bssl::UniquePtr<SSL_SESSION> *out_session,
     return false;
   }
   if (config->is_dtls) {
-    bssl::UniquePtr<BIO> packeted = PacketedBioCreate(&g_clock, !config->async);
+    bssl::UniquePtr<BIO> packeted = PacketedBioCreate(&g_clock);
     if (!packeted) {
       return false;
     }

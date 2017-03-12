@@ -50,20 +50,6 @@ NON_PERL_FILES = {
     ],
 }
 
-# For now, GTest-based tests are specified manually. Once everything has updated
-# to support GTest, these will be determined automatically by looking for files
-# ending with _test.cc.
-CRYPTO_TEST_SOURCES = [
-    'crypto/dh/dh_test.cc',
-    'crypto/dsa/dsa_test.cc',
-]
-DECREPIT_TEST_SOURCES = [
-    'decrepit/decrepit_test.cc',
-]
-SSL_TEST_SOURCES = [
-    'ssl/ssl_test.cc',
-]
-
 PREFIX = None
 
 
@@ -225,6 +211,8 @@ class Bazel(object):
       self.PrintVariableSection(
           out, 'ssl_internal_headers', files['ssl_internal_headers'])
       self.PrintVariableSection(out, 'ssl_sources', files['ssl'])
+      self.PrintVariableSection(out, 'ssl_c_sources', files['ssl_c'])
+      self.PrintVariableSection(out, 'ssl_cc_sources', files['ssl_cc'])
       self.PrintVariableSection(out, 'crypto_headers', files['crypto_headers'])
       self.PrintVariableSection(
           out, 'crypto_internal_headers', files['crypto_internal_headers'])
@@ -462,13 +450,6 @@ def OnlyTests(dent, is_dir):
   non-test sources."""
   if is_dir:
     return dent != 'test'
-  # For now, GTest-based tests are specified manually.
-  if dent in [os.path.basename(p) for p in CRYPTO_TEST_SOURCES]:
-    return False
-  if dent in [os.path.basename(p) for p in DECREPIT_TEST_SOURCES]:
-    return False
-  if dent in [os.path.basename(p) for p in SSL_TEST_SOURCES]:
-    return False
   return '_test.' in dent or dent.startswith('example_')
 
 
@@ -622,9 +603,14 @@ def WriteAsmFiles(perlasms):
   return asmfiles
 
 
+def IsGTest(path):
+  with open(path) as f:
+    return "#include <gtest/gtest.h>" in f.read()
+
+
 def main(platforms):
   crypto_c_files = FindCFiles(os.path.join('src', 'crypto'), NoTests)
-  ssl_c_files = FindCFiles(os.path.join('src', 'ssl'), NoTests)
+  ssl_source_files = FindCFiles(os.path.join('src', 'ssl'), NoTests)
   tool_c_files = FindCFiles(os.path.join('src', 'tool'), NoTests)
   tool_h_files = FindHeaderFiles(os.path.join('src', 'tool'), AllFiles)
 
@@ -641,8 +627,17 @@ def main(platforms):
       FindHeaderFiles(os.path.join('src', 'crypto', 'test'), AllFiles) +
       FindHeaderFiles(os.path.join('src', 'ssl', 'test'), AllFiles))
 
-  test_c_files = FindCFiles(os.path.join('src', 'crypto'), OnlyTests)
-  test_c_files += FindCFiles(os.path.join('src', 'ssl'), OnlyTests)
+  test_c_files = []
+  crypto_test_files = ['src/crypto/test/gtest_main.cc']
+  # TODO(davidben): Remove this loop once all tests are converted.
+  for path in FindCFiles(os.path.join('src', 'crypto'), OnlyTests):
+    if IsGTest(path):
+      crypto_test_files.append(path)
+    else:
+      test_c_files.append(path)
+
+  ssl_test_files = FindCFiles(os.path.join('src', 'ssl'), OnlyTests)
+  ssl_test_files.append('src/crypto/test/gtest_main.cc')
 
   fuzz_c_files = FindCFiles(os.path.join('src', 'fuzz'), NoTests)
 
@@ -687,13 +682,14 @@ def main(platforms):
       'crypto': crypto_c_files,
       'crypto_headers': crypto_h_files,
       'crypto_internal_headers': crypto_internal_h_files,
-      'crypto_test': sorted(CRYPTO_TEST_SOURCES +
-                            ['crypto/test/gtest_main.cc']),
+      'crypto_test': sorted(crypto_test_files),
       'fuzz': fuzz_c_files,
-      'ssl': ssl_c_files,
+      'ssl': ssl_source_files,
+      'ssl_c': [s for s in ssl_source_files if s.endswith('.c')],
+      'ssl_cc': [s for s in ssl_source_files if s.endswith('.cc')],
       'ssl_headers': ssl_h_files,
       'ssl_internal_headers': ssl_internal_h_files,
-      'ssl_test': sorted(SSL_TEST_SOURCES + ['crypto/test/gtest_main.cc']),
+      'ssl_test': sorted(ssl_test_files),
       'tool': tool_c_files,
       'tool_headers': tool_h_files,
       'test': test_c_files,

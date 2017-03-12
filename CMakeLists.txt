@@ -181,6 +181,7 @@ elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
   set(ARCH "aarch64")
 elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "mips")
   # Just to avoid the “unknown processor” error.
+  set(ARCH "generic")
 elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "ppc64le")
   set(ARCH "ppc64le")
 else()
@@ -220,8 +221,8 @@ if (ASAN)
     message(FATAL_ERROR "Cannot enable ASAN unless using Clang")
   endif()
 
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fsanitize-address-use-after-scope -fno-omit-frame-pointer")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize-address-use-after-scope -fno-omit-frame-pointer")
   set(OPENSSL_NO_ASM "1")
 endif()
 
@@ -239,10 +240,6 @@ endif()
 # googletest has a very straightforward build.
 add_library(gtest third_party/googletest/src/gtest-all.cc)
 target_include_directories(gtest PRIVATE third_party/googletest)
-if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  # TODO(davidben): Make googletest pass -Wmissing-declarations.
-  set_target_properties(gtest PROPERTIES COMPILE_FLAGS "-Wno-missing-declarations")
-endif()
 
 include_directories(third_party/googletest/include)
 
