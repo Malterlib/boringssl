@@ -341,6 +341,11 @@ typedef size_t CRYPTO_once_t [4];
  * the value |CRYPTO_ONCE_INIT|. */
 OPENSSL_EXPORT void CRYPTO_once(CRYPTO_once_t *once, void (OPENSSL_CDECL *init)(void));
 
+/* CRYPTO_add_cleanup adds a cleanup function that is run at module exit
+ *
+ */
+OPENSSL_EXPORT void CRYPTO_add_cleanup(void (OPENSSL_CDECL *cleanup)(void *), void *context);
+
 
 /* Reference counting. */
 

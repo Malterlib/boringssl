@@ -108,6 +108,13 @@ static int urandom_buffering_requested = 0;
  * is protected by |once|. */
 static int urandom_buffering = 0;
 
+static void  OPENSSL_CDECL cleanup_urandom(void *context) {
+  if (urandom_fd != kUnset && urandom_fd != kHaveGetrandom) {
+    close(urandom_fd);
+    urandom_fd = kUnset;
+  }
+}
+
 static CRYPTO_once_t once = CRYPTO_ONCE_INIT;
 
 /* init_once initializes the state of this module to values previously
@@ -168,6 +175,9 @@ static void  OPENSSL_CDECL init_once(void) {
     }
   }
   urandom_fd = fd;
+  
+  CRYPTO_add_cleanup(&cleanup_urandom, NULL);
+  
 }
 
 void RAND_set_urandom_fd(int fd) {

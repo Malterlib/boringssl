@@ -275,6 +275,22 @@ static const BN_MONT_CTX **built_in_curve_scalar_field_monts;
 
 static CRYPTO_once_t built_in_curve_scalar_field_monts_once;
 
+static void OPENSSL_CDECL built_in_curve_scalar_field_monts_cleanup(void *context) {
+  unsigned num_built_in_curves;
+  for (num_built_in_curves = 0;; num_built_in_curves++) {
+    if (OPENSSL_built_in_curves[num_built_in_curves].nid == NID_undef) {
+      break;
+    }
+  }
+  
+  unsigned i;
+  for (i = 0; i < num_built_in_curves; i++) {
+    BN_MONT_CTX_free((BN_MONT_CTX*)built_in_curve_scalar_field_monts[i]);
+  }
+  OPENSSL_free((BN_MONT_CTX**) built_in_curve_scalar_field_monts);
+  built_in_curve_scalar_field_monts = NULL;
+}
+
 static void OPENSSL_CDECL built_in_curve_scalar_field_monts_init(void) {
   unsigned num_built_in_curves;
   for (num_built_in_curves = 0;; num_built_in_curves++) {
@@ -320,6 +336,8 @@ static void OPENSSL_CDECL built_in_curve_scalar_field_monts_init(void) {
     mont_ctx = NULL;
   }
 
+  CRYPTO_add_cleanup(&built_in_curve_scalar_field_monts_cleanup, NULL);
+  
   goto out;
 
 err:
