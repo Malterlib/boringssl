@@ -567,7 +567,7 @@ static int cmp_long_name(const ASN1_OBJECT *a, const ASN1_OBJECT *b) {
   return strcmp(a->ln, b->ln);
 }
 
-static void OPENSSL_CDECL obj_cleanup_object(ASN1_OBJECT *obj) {
+static void obj_cleanup_object(ASN1_OBJECT *obj) {
   if (!obj)
     return;
   obj->flags |= (ASN1_OBJECT_FLAG_DYNAMIC | ASN1_OBJECT_FLAG_DYNAMIC_STRINGS |
