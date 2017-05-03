@@ -578,7 +578,7 @@ static const X509_VERIFY_PARAM default_table[] = {
 
 static STACK_OF(X509_VERIFY_PARAM) *param_table = NULL;
 
-static int param_cmp(const X509_VERIFY_PARAM **a, const X509_VERIFY_PARAM **b)
+static int OPENSSL_CDECL param_cmp(const X509_VERIFY_PARAM **a, const X509_VERIFY_PARAM **b)
 {
     return strcmp((*a)->name, (*b)->name);
 }

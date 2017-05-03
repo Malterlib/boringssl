@@ -63,7 +63,7 @@
 #include "pcy_int.h"
 #include "../internal.h"
 
-static int policy_data_cmp(const X509_POLICY_DATA **a,
+static int OPENSSL_CDECL policy_data_cmp(const X509_POLICY_DATA **a,
                            const X509_POLICY_DATA **b);
 static int policy_cache_set_int(long *out, ASN1_INTEGER *value);
 
@@ -267,7 +267,7 @@ X509_POLICY_DATA *policy_cache_find_data(const X509_POLICY_CACHE *cache,
     return sk_X509_POLICY_DATA_value(cache->data, idx);
 }
 
-static int policy_data_cmp(const X509_POLICY_DATA **a,
+static int OPENSSL_CDECL policy_data_cmp(const X509_POLICY_DATA **a,
                            const X509_POLICY_DATA **b)
 {
     return OBJ_cmp((*a)->valid_policy, (*b)->valid_policy);

@@ -80,7 +80,7 @@ typedef struct aes_key_st AES_KEY;
  *
  * WARNING: unlike other OpenSSL functions, this returns zero on success and a
  * negative number on error. */
-OPENSSL_EXPORT int AES_set_encrypt_key(const uint8_t *key, unsigned bits,
+OPENSSL_EXPORT int OPENSSL_CDECL AES_set_encrypt_key(const uint8_t *key, unsigned bits,
                                        AES_KEY *aeskey);
 
 /* AES_set_decrypt_key configures |aeskey| to decrypt with the |bits|-bit key,
@@ -88,17 +88,17 @@ OPENSSL_EXPORT int AES_set_encrypt_key(const uint8_t *key, unsigned bits,
  *
  * WARNING: unlike other OpenSSL functions, this returns zero on success and a
  * negative number on error. */
-OPENSSL_EXPORT int AES_set_decrypt_key(const uint8_t *key, unsigned bits,
+OPENSSL_EXPORT int OPENSSL_CDECL AES_set_decrypt_key(const uint8_t *key, unsigned bits,
                                        AES_KEY *aeskey);
 
 /* AES_encrypt encrypts a single block from |in| to |out| with |key|. The |in|
  * and |out| pointers may overlap. */
-OPENSSL_EXPORT void AES_encrypt(const uint8_t *in, uint8_t *out,
+OPENSSL_EXPORT void OPENSSL_CDECL AES_encrypt(const uint8_t *in, uint8_t *out,
                                 const AES_KEY *key);
 
 /* AES_decrypt decrypts a single block from |in| to |out| with |key|. The |in|
  * and |out| pointers may overlap. */
-OPENSSL_EXPORT void AES_decrypt(const uint8_t *in, uint8_t *out,
+OPENSSL_EXPORT void OPENSSL_CDECL AES_decrypt(const uint8_t *in, uint8_t *out,
                                 const AES_KEY *key);
 
 
@@ -107,7 +107,7 @@ OPENSSL_EXPORT void AES_decrypt(const uint8_t *in, uint8_t *out,
 /* AES_ctr128_encrypt encrypts (or decrypts, it's the same in CTR mode) |len|
  * bytes from |in| to |out|. The |num| parameter must be set to zero on the
  * first call and |ivec| will be incremented. */
-OPENSSL_EXPORT void AES_ctr128_encrypt(const uint8_t *in, uint8_t *out,
+OPENSSL_EXPORT void OPENSSL_CDECL AES_ctr128_encrypt(const uint8_t *in, uint8_t *out,
                                        size_t len, const AES_KEY *key,
                                        uint8_t ivec[AES_BLOCK_SIZE],
                                        uint8_t ecount_buf[AES_BLOCK_SIZE],
@@ -115,26 +115,26 @@ OPENSSL_EXPORT void AES_ctr128_encrypt(const uint8_t *in, uint8_t *out,
 
 /* AES_ecb_encrypt encrypts (or decrypts, if |enc| == |AES_DECRYPT|) a single,
  * 16 byte block from |in| to |out|. */
-OPENSSL_EXPORT void AES_ecb_encrypt(const uint8_t *in, uint8_t *out,
+OPENSSL_EXPORT void OPENSSL_CDECL AES_ecb_encrypt(const uint8_t *in, uint8_t *out,
                                     const AES_KEY *key, const int enc);
 
 /* AES_cbc_encrypt encrypts (or decrypts, if |enc| == |AES_DECRYPT|) |len|
  * bytes from |in| to |out|. The length must be a multiple of the block size. */
-OPENSSL_EXPORT void AES_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t len,
+OPENSSL_EXPORT void OPENSSL_CDECL OPENSSL_CDECL AES_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t len,
                                     const AES_KEY *key, uint8_t *ivec,
                                     const int enc);
 
 /* AES_ofb128_encrypt encrypts (or decrypts, it's the same in OFB mode) |len|
  * bytes from |in| to |out|. The |num| parameter must be set to zero on the
  * first call. */
-OPENSSL_EXPORT void AES_ofb128_encrypt(const uint8_t *in, uint8_t *out,
+OPENSSL_EXPORT void OPENSSL_CDECL AES_ofb128_encrypt(const uint8_t *in, uint8_t *out,
                                        size_t len, const AES_KEY *key,
                                        uint8_t *ivec, int *num);
 
 /* AES_cfb128_encrypt encrypts (or decrypts, if |enc| == |AES_DECRYPT|) |len|
  * bytes from |in| to |out|. The |num| parameter must be set to zero on the
  * first call. */
-OPENSSL_EXPORT void AES_cfb128_encrypt(const uint8_t *in, uint8_t *out,
+OPENSSL_EXPORT void OPENSSL_CDECL AES_cfb128_encrypt(const uint8_t *in, uint8_t *out,
                                        size_t len, const AES_KEY *key,
                                        uint8_t *ivec, int *num, int enc);
 

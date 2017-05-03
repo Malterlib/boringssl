@@ -99,7 +99,7 @@ static int check_purpose_timestamp_sign(const X509_PURPOSE *xp, const X509 *x,
 static int no_check(const X509_PURPOSE *xp, const X509 *x, int ca);
 static int ocsp_helper(const X509_PURPOSE *xp, const X509 *x, int ca);
 
-static int xp_cmp(const X509_PURPOSE **a, const X509_PURPOSE **b);
+static int OPENSSL_CDECL xp_cmp(const X509_PURPOSE **a, const X509_PURPOSE **b);
 static void xptable_free(X509_PURPOSE *p);
 
 static X509_PURPOSE xstandard[] = {
@@ -132,7 +132,7 @@ static X509_PURPOSE xstandard[] = {
 
 static STACK_OF(X509_PURPOSE) *xptable = NULL;
 
-static int xp_cmp(const X509_PURPOSE **a, const X509_PURPOSE **b)
+static int OPENSSL_CDECL xp_cmp(const X509_PURPOSE **a, const X509_PURPOSE **b)
 {
     return (*a)->purpose - (*b)->purpose;
 }

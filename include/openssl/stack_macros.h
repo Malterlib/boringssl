@@ -17,11 +17,12 @@
 #endif
 
 /* ACCESS_DESCRIPTION */
-#define sk_ACCESS_DESCRIPTION_new(comp)                                    \
-  ((STACK_OF(ACCESS_DESCRIPTION) *)sk_new(CHECKED_CAST(                    \
-      stack_cmp_func,                                                      \
-      int (*)(const ACCESS_DESCRIPTION **a, const ACCESS_DESCRIPTION **b), \
-      comp)))
+#define sk_ACCESS_DESCRIPTION_new(comp)                                \
+  ((STACK_OF(ACCESS_DESCRIPTION) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                     \
+                   int(OPENSSL_CDECL *)(const ACCESS_DESCRIPTION **a,  \
+                                        const ACCESS_DESCRIPTION **b), \
+                   comp)))
 
 #define sk_ACCESS_DESCRIPTION_new_null() \
   ((STACK_OF(ACCESS_DESCRIPTION) *)sk_new_null())
@@ -90,12 +91,14 @@
   sk_is_sorted(                             \
       CHECKED_CAST(const _STACK *, const STACK_OF(ACCESS_DESCRIPTION) *, sk))
 
-#define sk_ACCESS_DESCRIPTION_set_cmp_func(sk, comp)                           \
-  ((int (*)(const ACCESS_DESCRIPTION **a, const ACCESS_DESCRIPTION **b))       \
-       sk_set_cmp_func(                                                        \
-           CHECKED_CAST(_STACK *, STACK_OF(ACCESS_DESCRIPTION) *, sk),         \
-           CHECKED_CAST(stack_cmp_func, int (*)(const ACCESS_DESCRIPTION **a,  \
-                                                const ACCESS_DESCRIPTION **b), \
+#define sk_ACCESS_DESCRIPTION_set_cmp_func(sk, comp)                        \
+  ((int(OPENSSL_CDECL *)(const ACCESS_DESCRIPTION **a,                      \
+                         const ACCESS_DESCRIPTION **b))                     \
+       sk_set_cmp_func(                                                     \
+           CHECKED_CAST(_STACK *, STACK_OF(ACCESS_DESCRIPTION) *, sk),      \
+           CHECKED_CAST(stack_cmp_func,                                     \
+                        int(OPENSSL_CDECL *)(const ACCESS_DESCRIPTION **a,  \
+                                             const ACCESS_DESCRIPTION **b), \
                         comp)))
 
 #define sk_ACCESS_DESCRIPTION_deep_copy(sk, copy_func, free_func)             \
@@ -107,10 +110,12 @@
                    free_func)))
 
 /* ASN1_ADB_TABLE */
-#define sk_ASN1_ADB_TABLE_new(comp)                 \
-  ((STACK_OF(ASN1_ADB_TABLE) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func,                               \
-      int (*)(const ASN1_ADB_TABLE **a, const ASN1_ADB_TABLE **b), comp)))
+#define sk_ASN1_ADB_TABLE_new(comp)                                \
+  ((STACK_OF(ASN1_ADB_TABLE) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                 \
+                   int(OPENSSL_CDECL *)(const ASN1_ADB_TABLE **a,  \
+                                        const ASN1_ADB_TABLE **b), \
+                   comp)))
 
 #define sk_ASN1_ADB_TABLE_new_null() ((STACK_OF(ASN1_ADB_TABLE) *)sk_new_null())
 
@@ -178,12 +183,13 @@
   sk_is_sorted(                         \
       CHECKED_CAST(const _STACK *, const STACK_OF(ASN1_ADB_TABLE) *, sk))
 
-#define sk_ASN1_ADB_TABLE_set_cmp_func(sk, comp)                           \
-  ((int (*)(const ASN1_ADB_TABLE **a, const ASN1_ADB_TABLE **b))           \
-       sk_set_cmp_func(                                                    \
-           CHECKED_CAST(_STACK *, STACK_OF(ASN1_ADB_TABLE) *, sk),         \
-           CHECKED_CAST(stack_cmp_func, int (*)(const ASN1_ADB_TABLE **a,  \
-                                                const ASN1_ADB_TABLE **b), \
+#define sk_ASN1_ADB_TABLE_set_cmp_func(sk, comp)                              \
+  ((int(OPENSSL_CDECL *)(const ASN1_ADB_TABLE **a, const ASN1_ADB_TABLE **b)) \
+       sk_set_cmp_func(                                                       \
+           CHECKED_CAST(_STACK *, STACK_OF(ASN1_ADB_TABLE) *, sk),            \
+           CHECKED_CAST(stack_cmp_func,                                       \
+                        int(OPENSSL_CDECL *)(const ASN1_ADB_TABLE **a,        \
+                                             const ASN1_ADB_TABLE **b),       \
                         comp)))
 
 #define sk_ASN1_ADB_TABLE_deep_copy(sk, copy_func, free_func)                \
@@ -194,11 +200,12 @@
       CHECKED_CAST(void (*)(void *), void (*)(ASN1_ADB_TABLE *), free_func)))
 
 /* ASN1_GENERALSTRING */
-#define sk_ASN1_GENERALSTRING_new(comp)                                    \
-  ((STACK_OF(ASN1_GENERALSTRING) *)sk_new(CHECKED_CAST(                    \
-      stack_cmp_func,                                                      \
-      int (*)(const ASN1_GENERALSTRING **a, const ASN1_GENERALSTRING **b), \
-      comp)))
+#define sk_ASN1_GENERALSTRING_new(comp)                                \
+  ((STACK_OF(ASN1_GENERALSTRING) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                     \
+                   int(OPENSSL_CDECL *)(const ASN1_GENERALSTRING **a,  \
+                                        const ASN1_GENERALSTRING **b), \
+                   comp)))
 
 #define sk_ASN1_GENERALSTRING_new_null() \
   ((STACK_OF(ASN1_GENERALSTRING) *)sk_new_null())
@@ -267,12 +274,14 @@
   sk_is_sorted(                             \
       CHECKED_CAST(const _STACK *, const STACK_OF(ASN1_GENERALSTRING) *, sk))
 
-#define sk_ASN1_GENERALSTRING_set_cmp_func(sk, comp)                           \
-  ((int (*)(const ASN1_GENERALSTRING **a, const ASN1_GENERALSTRING **b))       \
-       sk_set_cmp_func(                                                        \
-           CHECKED_CAST(_STACK *, STACK_OF(ASN1_GENERALSTRING) *, sk),         \
-           CHECKED_CAST(stack_cmp_func, int (*)(const ASN1_GENERALSTRING **a,  \
-                                                const ASN1_GENERALSTRING **b), \
+#define sk_ASN1_GENERALSTRING_set_cmp_func(sk, comp)                        \
+  ((int(OPENSSL_CDECL *)(const ASN1_GENERALSTRING **a,                      \
+                         const ASN1_GENERALSTRING **b))                     \
+       sk_set_cmp_func(                                                     \
+           CHECKED_CAST(_STACK *, STACK_OF(ASN1_GENERALSTRING) *, sk),      \
+           CHECKED_CAST(stack_cmp_func,                                     \
+                        int(OPENSSL_CDECL *)(const ASN1_GENERALSTRING **a,  \
+                                             const ASN1_GENERALSTRING **b), \
                         comp)))
 
 #define sk_ASN1_GENERALSTRING_deep_copy(sk, copy_func, free_func)             \
@@ -284,9 +293,10 @@
                    free_func)))
 
 /* ASN1_INTEGER */
-#define sk_ASN1_INTEGER_new(comp)                                              \
-  ((STACK_OF(ASN1_INTEGER) *)sk_new(CHECKED_CAST(                              \
-      stack_cmp_func, int (*)(const ASN1_INTEGER **a, const ASN1_INTEGER **b), \
+#define sk_ASN1_INTEGER_new(comp)                                           \
+  ((STACK_OF(ASN1_INTEGER) *)sk_new(CHECKED_CAST(                           \
+      stack_cmp_func,                                                       \
+      int(OPENSSL_CDECL *)(const ASN1_INTEGER **a, const ASN1_INTEGER **b), \
       comp)))
 
 #define sk_ASN1_INTEGER_new_null() ((STACK_OF(ASN1_INTEGER) *)sk_new_null())
@@ -352,12 +362,14 @@
 #define sk_ASN1_INTEGER_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(ASN1_INTEGER) *, sk))
 
-#define sk_ASN1_INTEGER_set_cmp_func(sk, comp)                               \
-  ((int (*)(const ASN1_INTEGER **a, const ASN1_INTEGER **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(ASN1_INTEGER) *, sk),                  \
-      CHECKED_CAST(stack_cmp_func,                                           \
-                   int (*)(const ASN1_INTEGER **a, const ASN1_INTEGER **b),  \
-                   comp)))
+#define sk_ASN1_INTEGER_set_cmp_func(sk, comp)                            \
+  ((int(OPENSSL_CDECL *)(const ASN1_INTEGER **a, const ASN1_INTEGER **b)) \
+       sk_set_cmp_func(                                                   \
+           CHECKED_CAST(_STACK *, STACK_OF(ASN1_INTEGER) *, sk),          \
+           CHECKED_CAST(stack_cmp_func,                                   \
+                        int(OPENSSL_CDECL *)(const ASN1_INTEGER **a,      \
+                                             const ASN1_INTEGER **b),     \
+                        comp)))
 
 #define sk_ASN1_INTEGER_deep_copy(sk, copy_func, free_func)              \
   ((STACK_OF(ASN1_INTEGER) *)sk_deep_copy(                               \
@@ -367,9 +379,10 @@
       CHECKED_CAST(void (*)(void *), void (*)(ASN1_INTEGER *), free_func)))
 
 /* ASN1_OBJECT */
-#define sk_ASN1_OBJECT_new(comp)                                             \
-  ((STACK_OF(ASN1_OBJECT) *)sk_new(CHECKED_CAST(                             \
-      stack_cmp_func, int (*)(const ASN1_OBJECT **a, const ASN1_OBJECT **b), \
+#define sk_ASN1_OBJECT_new(comp)                                          \
+  ((STACK_OF(ASN1_OBJECT) *)sk_new(CHECKED_CAST(                          \
+      stack_cmp_func,                                                     \
+      int(OPENSSL_CDECL *)(const ASN1_OBJECT **a, const ASN1_OBJECT **b), \
       comp)))
 
 #define sk_ASN1_OBJECT_new_null() ((STACK_OF(ASN1_OBJECT) *)sk_new_null())
@@ -433,12 +446,14 @@
 #define sk_ASN1_OBJECT_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(ASN1_OBJECT) *, sk))
 
-#define sk_ASN1_OBJECT_set_cmp_func(sk, comp)                              \
-  ((int (*)(const ASN1_OBJECT **a, const ASN1_OBJECT **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(ASN1_OBJECT) *, sk),                 \
-      CHECKED_CAST(stack_cmp_func,                                         \
-                   int (*)(const ASN1_OBJECT **a, const ASN1_OBJECT **b),  \
-                   comp)))
+#define sk_ASN1_OBJECT_set_cmp_func(sk, comp)                           \
+  ((int(OPENSSL_CDECL *)(const ASN1_OBJECT **a, const ASN1_OBJECT **b)) \
+       sk_set_cmp_func(                                                 \
+           CHECKED_CAST(_STACK *, STACK_OF(ASN1_OBJECT) *, sk),         \
+           CHECKED_CAST(stack_cmp_func,                                 \
+                        int(OPENSSL_CDECL *)(const ASN1_OBJECT **a,     \
+                                             const ASN1_OBJECT **b),    \
+                        comp)))
 
 #define sk_ASN1_OBJECT_deep_copy(sk, copy_func, free_func)             \
   ((STACK_OF(ASN1_OBJECT) *)sk_deep_copy(                              \
@@ -448,11 +463,12 @@
       CHECKED_CAST(void (*)(void *), void (*)(ASN1_OBJECT *), free_func)))
 
 /* ASN1_STRING_TABLE */
-#define sk_ASN1_STRING_TABLE_new(comp)                                   \
-  ((STACK_OF(ASN1_STRING_TABLE) *)sk_new(CHECKED_CAST(                   \
-      stack_cmp_func,                                                    \
-      int (*)(const ASN1_STRING_TABLE **a, const ASN1_STRING_TABLE **b), \
-      comp)))
+#define sk_ASN1_STRING_TABLE_new(comp)                                \
+  ((STACK_OF(ASN1_STRING_TABLE) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                    \
+                   int(OPENSSL_CDECL *)(const ASN1_STRING_TABLE **a,  \
+                                        const ASN1_STRING_TABLE **b), \
+                   comp)))
 
 #define sk_ASN1_STRING_TABLE_new_null() \
   ((STACK_OF(ASN1_STRING_TABLE) *)sk_new_null())
@@ -521,12 +537,14 @@
   sk_is_sorted(                            \
       CHECKED_CAST(const _STACK *, const STACK_OF(ASN1_STRING_TABLE) *, sk))
 
-#define sk_ASN1_STRING_TABLE_set_cmp_func(sk, comp)                           \
-  ((int (*)(const ASN1_STRING_TABLE **a, const ASN1_STRING_TABLE **b))        \
-       sk_set_cmp_func(                                                       \
-           CHECKED_CAST(_STACK *, STACK_OF(ASN1_STRING_TABLE) *, sk),         \
-           CHECKED_CAST(stack_cmp_func, int (*)(const ASN1_STRING_TABLE **a,  \
-                                                const ASN1_STRING_TABLE **b), \
+#define sk_ASN1_STRING_TABLE_set_cmp_func(sk, comp)                        \
+  ((int(OPENSSL_CDECL *)(const ASN1_STRING_TABLE **a,                      \
+                         const ASN1_STRING_TABLE **b))                     \
+       sk_set_cmp_func(                                                    \
+           CHECKED_CAST(_STACK *, STACK_OF(ASN1_STRING_TABLE) *, sk),      \
+           CHECKED_CAST(stack_cmp_func,                                    \
+                        int(OPENSSL_CDECL *)(const ASN1_STRING_TABLE **a,  \
+                                             const ASN1_STRING_TABLE **b), \
                         comp)))
 
 #define sk_ASN1_STRING_TABLE_deep_copy(sk, copy_func, free_func)             \
@@ -538,10 +556,10 @@
                    free_func)))
 
 /* ASN1_TYPE */
-#define sk_ASN1_TYPE_new(comp)     \
-  ((STACK_OF(ASN1_TYPE) *)sk_new(  \
-      CHECKED_CAST(stack_cmp_func, \
-                   int (*)(const ASN1_TYPE **a, const ASN1_TYPE **b), comp)))
+#define sk_ASN1_TYPE_new(comp)                 \
+  ((STACK_OF(ASN1_TYPE) *)sk_new(CHECKED_CAST( \
+      stack_cmp_func,                          \
+      int(OPENSSL_CDECL *)(const ASN1_TYPE **a, const ASN1_TYPE **b), comp)))
 
 #define sk_ASN1_TYPE_new_null() ((STACK_OF(ASN1_TYPE) *)sk_new_null())
 
@@ -604,11 +622,13 @@
 #define sk_ASN1_TYPE_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(ASN1_TYPE) *, sk))
 
-#define sk_ASN1_TYPE_set_cmp_func(sk, comp)                            \
-  ((int (*)(const ASN1_TYPE **a, const ASN1_TYPE **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(ASN1_TYPE) *, sk),               \
-      CHECKED_CAST(stack_cmp_func,                                     \
-                   int (*)(const ASN1_TYPE **a, const ASN1_TYPE **b), comp)))
+#define sk_ASN1_TYPE_set_cmp_func(sk, comp)                                    \
+  ((int(OPENSSL_CDECL *)(const ASN1_TYPE **a, const ASN1_TYPE **b))            \
+       sk_set_cmp_func(CHECKED_CAST(_STACK *, STACK_OF(ASN1_TYPE) *, sk),      \
+                       CHECKED_CAST(stack_cmp_func,                            \
+                                    int(OPENSSL_CDECL *)(const ASN1_TYPE **a,  \
+                                                         const ASN1_TYPE **b), \
+                                    comp)))
 
 #define sk_ASN1_TYPE_deep_copy(sk, copy_func, free_func)                       \
   ((STACK_OF(ASN1_TYPE) *)sk_deep_copy(                                        \
@@ -617,9 +637,10 @@
       CHECKED_CAST(void (*)(void *), void (*)(ASN1_TYPE *), free_func)))
 
 /* ASN1_VALUE */
-#define sk_ASN1_VALUE_new(comp)                                            \
-  ((STACK_OF(ASN1_VALUE) *)sk_new(CHECKED_CAST(                            \
-      stack_cmp_func, int (*)(const ASN1_VALUE **a, const ASN1_VALUE **b), \
+#define sk_ASN1_VALUE_new(comp)                                         \
+  ((STACK_OF(ASN1_VALUE) *)sk_new(CHECKED_CAST(                         \
+      stack_cmp_func,                                                   \
+      int(OPENSSL_CDECL *)(const ASN1_VALUE **a, const ASN1_VALUE **b), \
       comp)))
 
 #define sk_ASN1_VALUE_new_null() ((STACK_OF(ASN1_VALUE) *)sk_new_null())
@@ -683,12 +704,14 @@
 #define sk_ASN1_VALUE_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(ASN1_VALUE) *, sk))
 
-#define sk_ASN1_VALUE_set_cmp_func(sk, comp)                             \
-  ((int (*)(const ASN1_VALUE **a, const ASN1_VALUE **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(ASN1_VALUE) *, sk),                \
-      CHECKED_CAST(stack_cmp_func,                                       \
-                   int (*)(const ASN1_VALUE **a, const ASN1_VALUE **b),  \
-                   comp)))
+#define sk_ASN1_VALUE_set_cmp_func(sk, comp)                          \
+  ((int(OPENSSL_CDECL *)(const ASN1_VALUE **a, const ASN1_VALUE **b)) \
+       sk_set_cmp_func(                                               \
+           CHECKED_CAST(_STACK *, STACK_OF(ASN1_VALUE) *, sk),        \
+           CHECKED_CAST(stack_cmp_func,                               \
+                        int(OPENSSL_CDECL *)(const ASN1_VALUE **a,    \
+                                             const ASN1_VALUE **b),   \
+                        comp)))
 
 #define sk_ASN1_VALUE_deep_copy(sk, copy_func, free_func)             \
   ((STACK_OF(ASN1_VALUE) *)sk_deep_copy(                              \
@@ -698,9 +721,10 @@
       CHECKED_CAST(void (*)(void *), void (*)(ASN1_VALUE *), free_func)))
 
 /* BIO */
-#define sk_BIO_new(comp)                 \
-  ((STACK_OF(BIO) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func, int (*)(const BIO **a, const BIO **b), comp)))
+#define sk_BIO_new(comp)           \
+  ((STACK_OF(BIO) *)sk_new(        \
+      CHECKED_CAST(stack_cmp_func, \
+                   int(OPENSSL_CDECL *)(const BIO **a, const BIO **b), comp)))
 
 #define sk_BIO_new_null() ((STACK_OF(BIO) *)sk_new_null())
 
@@ -757,11 +781,11 @@
 #define sk_BIO_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(BIO) *, sk))
 
-#define sk_BIO_set_cmp_func(sk, comp)                                     \
-  ((int (*)(const BIO **a, const BIO **b))sk_set_cmp_func(                \
-      CHECKED_CAST(_STACK *, STACK_OF(BIO) *, sk),                        \
-      CHECKED_CAST(stack_cmp_func, int (*)(const BIO **a, const BIO **b), \
-                   comp)))
+#define sk_BIO_set_cmp_func(sk, comp)                                   \
+  ((int(OPENSSL_CDECL *)(const BIO **a, const BIO **b))sk_set_cmp_func( \
+      CHECKED_CAST(_STACK *, STACK_OF(BIO) *, sk),                      \
+      CHECKED_CAST(stack_cmp_func,                                      \
+                   int(OPENSSL_CDECL *)(const BIO **a, const BIO **b), comp)))
 
 #define sk_BIO_deep_copy(sk, copy_func, free_func)                 \
   ((STACK_OF(BIO) *)sk_deep_copy(                                  \
@@ -770,9 +794,10 @@
       CHECKED_CAST(void (*)(void *), void (*)(BIO *), free_func)))
 
 /* BY_DIR_ENTRY */
-#define sk_BY_DIR_ENTRY_new(comp)                                              \
-  ((STACK_OF(BY_DIR_ENTRY) *)sk_new(CHECKED_CAST(                              \
-      stack_cmp_func, int (*)(const BY_DIR_ENTRY **a, const BY_DIR_ENTRY **b), \
+#define sk_BY_DIR_ENTRY_new(comp)                                           \
+  ((STACK_OF(BY_DIR_ENTRY) *)sk_new(CHECKED_CAST(                           \
+      stack_cmp_func,                                                       \
+      int(OPENSSL_CDECL *)(const BY_DIR_ENTRY **a, const BY_DIR_ENTRY **b), \
       comp)))
 
 #define sk_BY_DIR_ENTRY_new_null() ((STACK_OF(BY_DIR_ENTRY) *)sk_new_null())
@@ -838,12 +863,14 @@
 #define sk_BY_DIR_ENTRY_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(BY_DIR_ENTRY) *, sk))
 
-#define sk_BY_DIR_ENTRY_set_cmp_func(sk, comp)                               \
-  ((int (*)(const BY_DIR_ENTRY **a, const BY_DIR_ENTRY **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(BY_DIR_ENTRY) *, sk),                  \
-      CHECKED_CAST(stack_cmp_func,                                           \
-                   int (*)(const BY_DIR_ENTRY **a, const BY_DIR_ENTRY **b),  \
-                   comp)))
+#define sk_BY_DIR_ENTRY_set_cmp_func(sk, comp)                            \
+  ((int(OPENSSL_CDECL *)(const BY_DIR_ENTRY **a, const BY_DIR_ENTRY **b)) \
+       sk_set_cmp_func(                                                   \
+           CHECKED_CAST(_STACK *, STACK_OF(BY_DIR_ENTRY) *, sk),          \
+           CHECKED_CAST(stack_cmp_func,                                   \
+                        int(OPENSSL_CDECL *)(const BY_DIR_ENTRY **a,      \
+                                             const BY_DIR_ENTRY **b),     \
+                        comp)))
 
 #define sk_BY_DIR_ENTRY_deep_copy(sk, copy_func, free_func)              \
   ((STACK_OF(BY_DIR_ENTRY) *)sk_deep_copy(                               \
@@ -853,9 +880,10 @@
       CHECKED_CAST(void (*)(void *), void (*)(BY_DIR_ENTRY *), free_func)))
 
 /* BY_DIR_HASH */
-#define sk_BY_DIR_HASH_new(comp)                                             \
-  ((STACK_OF(BY_DIR_HASH) *)sk_new(CHECKED_CAST(                             \
-      stack_cmp_func, int (*)(const BY_DIR_HASH **a, const BY_DIR_HASH **b), \
+#define sk_BY_DIR_HASH_new(comp)                                          \
+  ((STACK_OF(BY_DIR_HASH) *)sk_new(CHECKED_CAST(                          \
+      stack_cmp_func,                                                     \
+      int(OPENSSL_CDECL *)(const BY_DIR_HASH **a, const BY_DIR_HASH **b), \
       comp)))
 
 #define sk_BY_DIR_HASH_new_null() ((STACK_OF(BY_DIR_HASH) *)sk_new_null())
@@ -919,12 +947,14 @@
 #define sk_BY_DIR_HASH_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(BY_DIR_HASH) *, sk))
 
-#define sk_BY_DIR_HASH_set_cmp_func(sk, comp)                              \
-  ((int (*)(const BY_DIR_HASH **a, const BY_DIR_HASH **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(BY_DIR_HASH) *, sk),                 \
-      CHECKED_CAST(stack_cmp_func,                                         \
-                   int (*)(const BY_DIR_HASH **a, const BY_DIR_HASH **b),  \
-                   comp)))
+#define sk_BY_DIR_HASH_set_cmp_func(sk, comp)                           \
+  ((int(OPENSSL_CDECL *)(const BY_DIR_HASH **a, const BY_DIR_HASH **b)) \
+       sk_set_cmp_func(                                                 \
+           CHECKED_CAST(_STACK *, STACK_OF(BY_DIR_HASH) *, sk),         \
+           CHECKED_CAST(stack_cmp_func,                                 \
+                        int(OPENSSL_CDECL *)(const BY_DIR_HASH **a,     \
+                                             const BY_DIR_HASH **b),    \
+                        comp)))
 
 #define sk_BY_DIR_HASH_deep_copy(sk, copy_func, free_func)             \
   ((STACK_OF(BY_DIR_HASH) *)sk_deep_copy(                              \
@@ -934,9 +964,10 @@
       CHECKED_CAST(void (*)(void *), void (*)(BY_DIR_HASH *), free_func)))
 
 /* CONF_VALUE */
-#define sk_CONF_VALUE_new(comp)                                            \
-  ((STACK_OF(CONF_VALUE) *)sk_new(CHECKED_CAST(                            \
-      stack_cmp_func, int (*)(const CONF_VALUE **a, const CONF_VALUE **b), \
+#define sk_CONF_VALUE_new(comp)                                         \
+  ((STACK_OF(CONF_VALUE) *)sk_new(CHECKED_CAST(                         \
+      stack_cmp_func,                                                   \
+      int(OPENSSL_CDECL *)(const CONF_VALUE **a, const CONF_VALUE **b), \
       comp)))
 
 #define sk_CONF_VALUE_new_null() ((STACK_OF(CONF_VALUE) *)sk_new_null())
@@ -1000,12 +1031,14 @@
 #define sk_CONF_VALUE_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(CONF_VALUE) *, sk))
 
-#define sk_CONF_VALUE_set_cmp_func(sk, comp)                             \
-  ((int (*)(const CONF_VALUE **a, const CONF_VALUE **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(CONF_VALUE) *, sk),                \
-      CHECKED_CAST(stack_cmp_func,                                       \
-                   int (*)(const CONF_VALUE **a, const CONF_VALUE **b),  \
-                   comp)))
+#define sk_CONF_VALUE_set_cmp_func(sk, comp)                          \
+  ((int(OPENSSL_CDECL *)(const CONF_VALUE **a, const CONF_VALUE **b)) \
+       sk_set_cmp_func(                                               \
+           CHECKED_CAST(_STACK *, STACK_OF(CONF_VALUE) *, sk),        \
+           CHECKED_CAST(stack_cmp_func,                               \
+                        int(OPENSSL_CDECL *)(const CONF_VALUE **a,    \
+                                             const CONF_VALUE **b),   \
+                        comp)))
 
 #define sk_CONF_VALUE_deep_copy(sk, copy_func, free_func)             \
   ((STACK_OF(CONF_VALUE) *)sk_deep_copy(                              \
@@ -1015,10 +1048,11 @@
       CHECKED_CAST(void (*)(void *), void (*)(CONF_VALUE *), free_func)))
 
 /* CRYPTO_BUFFER */
-#define sk_CRYPTO_BUFFER_new(comp)                 \
-  ((STACK_OF(CRYPTO_BUFFER) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func,                              \
-      int (*)(const CRYPTO_BUFFER **a, const CRYPTO_BUFFER **b), comp)))
+#define sk_CRYPTO_BUFFER_new(comp)                                            \
+  ((STACK_OF(CRYPTO_BUFFER) *)sk_new(CHECKED_CAST(                            \
+      stack_cmp_func,                                                         \
+      int(OPENSSL_CDECL *)(const CRYPTO_BUFFER **a, const CRYPTO_BUFFER **b), \
+      comp)))
 
 #define sk_CRYPTO_BUFFER_new_null() ((STACK_OF(CRYPTO_BUFFER) *)sk_new_null())
 
@@ -1085,12 +1119,14 @@
   sk_is_sorted(                        \
       CHECKED_CAST(const _STACK *, const STACK_OF(CRYPTO_BUFFER) *, sk))
 
-#define sk_CRYPTO_BUFFER_set_cmp_func(sk, comp)                                \
-  ((int (*)(const CRYPTO_BUFFER **a, const CRYPTO_BUFFER **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(CRYPTO_BUFFER) *, sk),                   \
-      CHECKED_CAST(stack_cmp_func,                                             \
-                   int (*)(const CRYPTO_BUFFER **a, const CRYPTO_BUFFER **b),  \
-                   comp)))
+#define sk_CRYPTO_BUFFER_set_cmp_func(sk, comp)                             \
+  ((int(OPENSSL_CDECL *)(const CRYPTO_BUFFER **a, const CRYPTO_BUFFER **b)) \
+       sk_set_cmp_func(                                                     \
+           CHECKED_CAST(_STACK *, STACK_OF(CRYPTO_BUFFER) *, sk),           \
+           CHECKED_CAST(stack_cmp_func,                                     \
+                        int(OPENSSL_CDECL *)(const CRYPTO_BUFFER **a,       \
+                                             const CRYPTO_BUFFER **b),      \
+                        comp)))
 
 #define sk_CRYPTO_BUFFER_deep_copy(sk, copy_func, free_func)               \
   ((STACK_OF(CRYPTO_BUFFER) *)sk_deep_copy(                                \
@@ -1100,11 +1136,12 @@
       CHECKED_CAST(void (*)(void *), void (*)(CRYPTO_BUFFER *), free_func)))
 
 /* CRYPTO_EX_DATA_FUNCS */
-#define sk_CRYPTO_EX_DATA_FUNCS_new(comp)                                      \
-  ((STACK_OF(CRYPTO_EX_DATA_FUNCS) *)sk_new(CHECKED_CAST(                      \
-      stack_cmp_func,                                                          \
-      int (*)(const CRYPTO_EX_DATA_FUNCS **a, const CRYPTO_EX_DATA_FUNCS **b), \
-      comp)))
+#define sk_CRYPTO_EX_DATA_FUNCS_new(comp)                                \
+  ((STACK_OF(CRYPTO_EX_DATA_FUNCS) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                       \
+                   int(OPENSSL_CDECL *)(const CRYPTO_EX_DATA_FUNCS **a,  \
+                                        const CRYPTO_EX_DATA_FUNCS **b), \
+                   comp)))
 
 #define sk_CRYPTO_EX_DATA_FUNCS_new_null() \
   ((STACK_OF(CRYPTO_EX_DATA_FUNCS) *)sk_new_null())
@@ -1175,13 +1212,14 @@
   sk_is_sorted(CHECKED_CAST(const _STACK *,   \
                             const STACK_OF(CRYPTO_EX_DATA_FUNCS) *, sk))
 
-#define sk_CRYPTO_EX_DATA_FUNCS_set_cmp_func(sk, comp)                       \
-  ((int (*)(const CRYPTO_EX_DATA_FUNCS **a, const CRYPTO_EX_DATA_FUNCS **b)) \
-       sk_set_cmp_func(                                                      \
-           CHECKED_CAST(_STACK *, STACK_OF(CRYPTO_EX_DATA_FUNCS) *, sk),     \
-           CHECKED_CAST(stack_cmp_func,                                      \
-                        int (*)(const CRYPTO_EX_DATA_FUNCS **a,              \
-                                const CRYPTO_EX_DATA_FUNCS **b),             \
+#define sk_CRYPTO_EX_DATA_FUNCS_set_cmp_func(sk, comp)                        \
+  ((int(OPENSSL_CDECL *)(const CRYPTO_EX_DATA_FUNCS **a,                      \
+                         const CRYPTO_EX_DATA_FUNCS **b))                     \
+       sk_set_cmp_func(                                                       \
+           CHECKED_CAST(_STACK *, STACK_OF(CRYPTO_EX_DATA_FUNCS) *, sk),      \
+           CHECKED_CAST(stack_cmp_func,                                       \
+                        int(OPENSSL_CDECL *)(const CRYPTO_EX_DATA_FUNCS **a,  \
+                                             const CRYPTO_EX_DATA_FUNCS **b), \
                         comp)))
 
 #define sk_CRYPTO_EX_DATA_FUNCS_deep_copy(sk, copy_func, free_func)        \
@@ -1195,9 +1233,10 @@
                    free_func)))
 
 /* DIST_POINT */
-#define sk_DIST_POINT_new(comp)                                            \
-  ((STACK_OF(DIST_POINT) *)sk_new(CHECKED_CAST(                            \
-      stack_cmp_func, int (*)(const DIST_POINT **a, const DIST_POINT **b), \
+#define sk_DIST_POINT_new(comp)                                         \
+  ((STACK_OF(DIST_POINT) *)sk_new(CHECKED_CAST(                         \
+      stack_cmp_func,                                                   \
+      int(OPENSSL_CDECL *)(const DIST_POINT **a, const DIST_POINT **b), \
       comp)))
 
 #define sk_DIST_POINT_new_null() ((STACK_OF(DIST_POINT) *)sk_new_null())
@@ -1261,12 +1300,14 @@
 #define sk_DIST_POINT_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(DIST_POINT) *, sk))
 
-#define sk_DIST_POINT_set_cmp_func(sk, comp)                             \
-  ((int (*)(const DIST_POINT **a, const DIST_POINT **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(DIST_POINT) *, sk),                \
-      CHECKED_CAST(stack_cmp_func,                                       \
-                   int (*)(const DIST_POINT **a, const DIST_POINT **b),  \
-                   comp)))
+#define sk_DIST_POINT_set_cmp_func(sk, comp)                          \
+  ((int(OPENSSL_CDECL *)(const DIST_POINT **a, const DIST_POINT **b)) \
+       sk_set_cmp_func(                                               \
+           CHECKED_CAST(_STACK *, STACK_OF(DIST_POINT) *, sk),        \
+           CHECKED_CAST(stack_cmp_func,                               \
+                        int(OPENSSL_CDECL *)(const DIST_POINT **a,    \
+                                             const DIST_POINT **b),   \
+                        comp)))
 
 #define sk_DIST_POINT_deep_copy(sk, copy_func, free_func)             \
   ((STACK_OF(DIST_POINT) *)sk_deep_copy(                              \
@@ -1276,9 +1317,10 @@
       CHECKED_CAST(void (*)(void *), void (*)(DIST_POINT *), free_func)))
 
 /* GENERAL_NAME */
-#define sk_GENERAL_NAME_new(comp)                                              \
-  ((STACK_OF(GENERAL_NAME) *)sk_new(CHECKED_CAST(                              \
-      stack_cmp_func, int (*)(const GENERAL_NAME **a, const GENERAL_NAME **b), \
+#define sk_GENERAL_NAME_new(comp)                                           \
+  ((STACK_OF(GENERAL_NAME) *)sk_new(CHECKED_CAST(                           \
+      stack_cmp_func,                                                       \
+      int(OPENSSL_CDECL *)(const GENERAL_NAME **a, const GENERAL_NAME **b), \
       comp)))
 
 #define sk_GENERAL_NAME_new_null() ((STACK_OF(GENERAL_NAME) *)sk_new_null())
@@ -1344,12 +1386,14 @@
 #define sk_GENERAL_NAME_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(GENERAL_NAME) *, sk))
 
-#define sk_GENERAL_NAME_set_cmp_func(sk, comp)                               \
-  ((int (*)(const GENERAL_NAME **a, const GENERAL_NAME **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(GENERAL_NAME) *, sk),                  \
-      CHECKED_CAST(stack_cmp_func,                                           \
-                   int (*)(const GENERAL_NAME **a, const GENERAL_NAME **b),  \
-                   comp)))
+#define sk_GENERAL_NAME_set_cmp_func(sk, comp)                            \
+  ((int(OPENSSL_CDECL *)(const GENERAL_NAME **a, const GENERAL_NAME **b)) \
+       sk_set_cmp_func(                                                   \
+           CHECKED_CAST(_STACK *, STACK_OF(GENERAL_NAME) *, sk),          \
+           CHECKED_CAST(stack_cmp_func,                                   \
+                        int(OPENSSL_CDECL *)(const GENERAL_NAME **a,      \
+                                             const GENERAL_NAME **b),     \
+                        comp)))
 
 #define sk_GENERAL_NAME_deep_copy(sk, copy_func, free_func)              \
   ((STACK_OF(GENERAL_NAME) *)sk_deep_copy(                               \
@@ -1359,10 +1403,11 @@
       CHECKED_CAST(void (*)(void *), void (*)(GENERAL_NAME *), free_func)))
 
 /* GENERAL_NAMES */
-#define sk_GENERAL_NAMES_new(comp)                 \
-  ((STACK_OF(GENERAL_NAMES) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func,                              \
-      int (*)(const GENERAL_NAMES **a, const GENERAL_NAMES **b), comp)))
+#define sk_GENERAL_NAMES_new(comp)                                            \
+  ((STACK_OF(GENERAL_NAMES) *)sk_new(CHECKED_CAST(                            \
+      stack_cmp_func,                                                         \
+      int(OPENSSL_CDECL *)(const GENERAL_NAMES **a, const GENERAL_NAMES **b), \
+      comp)))
 
 #define sk_GENERAL_NAMES_new_null() ((STACK_OF(GENERAL_NAMES) *)sk_new_null())
 
@@ -1429,12 +1474,14 @@
   sk_is_sorted(                        \
       CHECKED_CAST(const _STACK *, const STACK_OF(GENERAL_NAMES) *, sk))
 
-#define sk_GENERAL_NAMES_set_cmp_func(sk, comp)                                \
-  ((int (*)(const GENERAL_NAMES **a, const GENERAL_NAMES **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(GENERAL_NAMES) *, sk),                   \
-      CHECKED_CAST(stack_cmp_func,                                             \
-                   int (*)(const GENERAL_NAMES **a, const GENERAL_NAMES **b),  \
-                   comp)))
+#define sk_GENERAL_NAMES_set_cmp_func(sk, comp)                             \
+  ((int(OPENSSL_CDECL *)(const GENERAL_NAMES **a, const GENERAL_NAMES **b)) \
+       sk_set_cmp_func(                                                     \
+           CHECKED_CAST(_STACK *, STACK_OF(GENERAL_NAMES) *, sk),           \
+           CHECKED_CAST(stack_cmp_func,                                     \
+                        int(OPENSSL_CDECL *)(const GENERAL_NAMES **a,       \
+                                             const GENERAL_NAMES **b),      \
+                        comp)))
 
 #define sk_GENERAL_NAMES_deep_copy(sk, copy_func, free_func)               \
   ((STACK_OF(GENERAL_NAMES) *)sk_deep_copy(                                \
@@ -1444,10 +1491,12 @@
       CHECKED_CAST(void (*)(void *), void (*)(GENERAL_NAMES *), free_func)))
 
 /* GENERAL_SUBTREE */
-#define sk_GENERAL_SUBTREE_new(comp)                 \
-  ((STACK_OF(GENERAL_SUBTREE) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func,                                \
-      int (*)(const GENERAL_SUBTREE **a, const GENERAL_SUBTREE **b), comp)))
+#define sk_GENERAL_SUBTREE_new(comp)                                \
+  ((STACK_OF(GENERAL_SUBTREE) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                  \
+                   int(OPENSSL_CDECL *)(const GENERAL_SUBTREE **a,  \
+                                        const GENERAL_SUBTREE **b), \
+                   comp)))
 
 #define sk_GENERAL_SUBTREE_new_null() \
   ((STACK_OF(GENERAL_SUBTREE) *)sk_new_null())
@@ -1516,12 +1565,14 @@
   sk_is_sorted(                          \
       CHECKED_CAST(const _STACK *, const STACK_OF(GENERAL_SUBTREE) *, sk))
 
-#define sk_GENERAL_SUBTREE_set_cmp_func(sk, comp)                           \
-  ((int (*)(const GENERAL_SUBTREE **a, const GENERAL_SUBTREE **b))          \
-       sk_set_cmp_func(                                                     \
-           CHECKED_CAST(_STACK *, STACK_OF(GENERAL_SUBTREE) *, sk),         \
-           CHECKED_CAST(stack_cmp_func, int (*)(const GENERAL_SUBTREE **a,  \
-                                                const GENERAL_SUBTREE **b), \
+#define sk_GENERAL_SUBTREE_set_cmp_func(sk, comp)                        \
+  ((int(OPENSSL_CDECL *)(const GENERAL_SUBTREE **a,                      \
+                         const GENERAL_SUBTREE **b))                     \
+       sk_set_cmp_func(                                                  \
+           CHECKED_CAST(_STACK *, STACK_OF(GENERAL_SUBTREE) *, sk),      \
+           CHECKED_CAST(stack_cmp_func,                                  \
+                        int(OPENSSL_CDECL *)(const GENERAL_SUBTREE **a,  \
+                                             const GENERAL_SUBTREE **b), \
                         comp)))
 
 #define sk_GENERAL_SUBTREE_deep_copy(sk, copy_func, free_func)                 \
@@ -1532,9 +1583,10 @@
       CHECKED_CAST(void (*)(void *), void (*)(GENERAL_SUBTREE *), free_func)))
 
 /* POLICYINFO */
-#define sk_POLICYINFO_new(comp)                                            \
-  ((STACK_OF(POLICYINFO) *)sk_new(CHECKED_CAST(                            \
-      stack_cmp_func, int (*)(const POLICYINFO **a, const POLICYINFO **b), \
+#define sk_POLICYINFO_new(comp)                                         \
+  ((STACK_OF(POLICYINFO) *)sk_new(CHECKED_CAST(                         \
+      stack_cmp_func,                                                   \
+      int(OPENSSL_CDECL *)(const POLICYINFO **a, const POLICYINFO **b), \
       comp)))
 
 #define sk_POLICYINFO_new_null() ((STACK_OF(POLICYINFO) *)sk_new_null())
@@ -1598,12 +1650,14 @@
 #define sk_POLICYINFO_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(POLICYINFO) *, sk))
 
-#define sk_POLICYINFO_set_cmp_func(sk, comp)                             \
-  ((int (*)(const POLICYINFO **a, const POLICYINFO **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(POLICYINFO) *, sk),                \
-      CHECKED_CAST(stack_cmp_func,                                       \
-                   int (*)(const POLICYINFO **a, const POLICYINFO **b),  \
-                   comp)))
+#define sk_POLICYINFO_set_cmp_func(sk, comp)                          \
+  ((int(OPENSSL_CDECL *)(const POLICYINFO **a, const POLICYINFO **b)) \
+       sk_set_cmp_func(                                               \
+           CHECKED_CAST(_STACK *, STACK_OF(POLICYINFO) *, sk),        \
+           CHECKED_CAST(stack_cmp_func,                               \
+                        int(OPENSSL_CDECL *)(const POLICYINFO **a,    \
+                                             const POLICYINFO **b),   \
+                        comp)))
 
 #define sk_POLICYINFO_deep_copy(sk, copy_func, free_func)             \
   ((STACK_OF(POLICYINFO) *)sk_deep_copy(                              \
@@ -1613,10 +1667,12 @@
       CHECKED_CAST(void (*)(void *), void (*)(POLICYINFO *), free_func)))
 
 /* POLICYQUALINFO */
-#define sk_POLICYQUALINFO_new(comp)                 \
-  ((STACK_OF(POLICYQUALINFO) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func,                               \
-      int (*)(const POLICYQUALINFO **a, const POLICYQUALINFO **b), comp)))
+#define sk_POLICYQUALINFO_new(comp)                                \
+  ((STACK_OF(POLICYQUALINFO) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                 \
+                   int(OPENSSL_CDECL *)(const POLICYQUALINFO **a,  \
+                                        const POLICYQUALINFO **b), \
+                   comp)))
 
 #define sk_POLICYQUALINFO_new_null() ((STACK_OF(POLICYQUALINFO) *)sk_new_null())
 
@@ -1684,12 +1740,13 @@
   sk_is_sorted(                         \
       CHECKED_CAST(const _STACK *, const STACK_OF(POLICYQUALINFO) *, sk))
 
-#define sk_POLICYQUALINFO_set_cmp_func(sk, comp)                           \
-  ((int (*)(const POLICYQUALINFO **a, const POLICYQUALINFO **b))           \
-       sk_set_cmp_func(                                                    \
-           CHECKED_CAST(_STACK *, STACK_OF(POLICYQUALINFO) *, sk),         \
-           CHECKED_CAST(stack_cmp_func, int (*)(const POLICYQUALINFO **a,  \
-                                                const POLICYQUALINFO **b), \
+#define sk_POLICYQUALINFO_set_cmp_func(sk, comp)                              \
+  ((int(OPENSSL_CDECL *)(const POLICYQUALINFO **a, const POLICYQUALINFO **b)) \
+       sk_set_cmp_func(                                                       \
+           CHECKED_CAST(_STACK *, STACK_OF(POLICYQUALINFO) *, sk),            \
+           CHECKED_CAST(stack_cmp_func,                                       \
+                        int(OPENSSL_CDECL *)(const POLICYQUALINFO **a,        \
+                                             const POLICYQUALINFO **b),       \
                         comp)))
 
 #define sk_POLICYQUALINFO_deep_copy(sk, copy_func, free_func)                \
@@ -1700,10 +1757,12 @@
       CHECKED_CAST(void (*)(void *), void (*)(POLICYQUALINFO *), free_func)))
 
 /* POLICY_MAPPING */
-#define sk_POLICY_MAPPING_new(comp)                 \
-  ((STACK_OF(POLICY_MAPPING) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func,                               \
-      int (*)(const POLICY_MAPPING **a, const POLICY_MAPPING **b), comp)))
+#define sk_POLICY_MAPPING_new(comp)                                \
+  ((STACK_OF(POLICY_MAPPING) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                 \
+                   int(OPENSSL_CDECL *)(const POLICY_MAPPING **a,  \
+                                        const POLICY_MAPPING **b), \
+                   comp)))
 
 #define sk_POLICY_MAPPING_new_null() ((STACK_OF(POLICY_MAPPING) *)sk_new_null())
 
@@ -1771,12 +1830,13 @@
   sk_is_sorted(                         \
       CHECKED_CAST(const _STACK *, const STACK_OF(POLICY_MAPPING) *, sk))
 
-#define sk_POLICY_MAPPING_set_cmp_func(sk, comp)                           \
-  ((int (*)(const POLICY_MAPPING **a, const POLICY_MAPPING **b))           \
-       sk_set_cmp_func(                                                    \
-           CHECKED_CAST(_STACK *, STACK_OF(POLICY_MAPPING) *, sk),         \
-           CHECKED_CAST(stack_cmp_func, int (*)(const POLICY_MAPPING **a,  \
-                                                const POLICY_MAPPING **b), \
+#define sk_POLICY_MAPPING_set_cmp_func(sk, comp)                              \
+  ((int(OPENSSL_CDECL *)(const POLICY_MAPPING **a, const POLICY_MAPPING **b)) \
+       sk_set_cmp_func(                                                       \
+           CHECKED_CAST(_STACK *, STACK_OF(POLICY_MAPPING) *, sk),            \
+           CHECKED_CAST(stack_cmp_func,                                       \
+                        int(OPENSSL_CDECL *)(const POLICY_MAPPING **a,        \
+                                             const POLICY_MAPPING **b),       \
                         comp)))
 
 #define sk_POLICY_MAPPING_deep_copy(sk, copy_func, free_func)                \
@@ -1787,11 +1847,12 @@
       CHECKED_CAST(void (*)(void *), void (*)(POLICY_MAPPING *), free_func)))
 
 /* RSA_additional_prime */
-#define sk_RSA_additional_prime_new(comp)                                      \
-  ((STACK_OF(RSA_additional_prime) *)sk_new(CHECKED_CAST(                      \
-      stack_cmp_func,                                                          \
-      int (*)(const RSA_additional_prime **a, const RSA_additional_prime **b), \
-      comp)))
+#define sk_RSA_additional_prime_new(comp)                                \
+  ((STACK_OF(RSA_additional_prime) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                       \
+                   int(OPENSSL_CDECL *)(const RSA_additional_prime **a,  \
+                                        const RSA_additional_prime **b), \
+                   comp)))
 
 #define sk_RSA_additional_prime_new_null() \
   ((STACK_OF(RSA_additional_prime) *)sk_new_null())
@@ -1862,13 +1923,14 @@
   sk_is_sorted(CHECKED_CAST(const _STACK *,   \
                             const STACK_OF(RSA_additional_prime) *, sk))
 
-#define sk_RSA_additional_prime_set_cmp_func(sk, comp)                       \
-  ((int (*)(const RSA_additional_prime **a, const RSA_additional_prime **b)) \
-       sk_set_cmp_func(                                                      \
-           CHECKED_CAST(_STACK *, STACK_OF(RSA_additional_prime) *, sk),     \
-           CHECKED_CAST(stack_cmp_func,                                      \
-                        int (*)(const RSA_additional_prime **a,              \
-                                const RSA_additional_prime **b),             \
+#define sk_RSA_additional_prime_set_cmp_func(sk, comp)                        \
+  ((int(OPENSSL_CDECL *)(const RSA_additional_prime **a,                      \
+                         const RSA_additional_prime **b))                     \
+       sk_set_cmp_func(                                                       \
+           CHECKED_CAST(_STACK *, STACK_OF(RSA_additional_prime) *, sk),      \
+           CHECKED_CAST(stack_cmp_func,                                       \
+                        int(OPENSSL_CDECL *)(const RSA_additional_prime **a,  \
+                                             const RSA_additional_prime **b), \
                         comp)))
 
 #define sk_RSA_additional_prime_deep_copy(sk, copy_func, free_func)        \
@@ -1884,7 +1946,8 @@
 /* SSL_COMP */
 #define sk_SSL_COMP_new(comp)                 \
   ((STACK_OF(SSL_COMP) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func, int (*)(const SSL_COMP **a, const SSL_COMP **b), comp)))
+      stack_cmp_func,                         \
+      int(OPENSSL_CDECL *)(const SSL_COMP **a, const SSL_COMP **b), comp)))
 
 #define sk_SSL_COMP_new_null() ((STACK_OF(SSL_COMP) *)sk_new_null())
 
@@ -1945,11 +2008,13 @@
 #define sk_SSL_COMP_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(SSL_COMP) *, sk))
 
-#define sk_SSL_COMP_set_cmp_func(sk, comp)                           \
-  ((int (*)(const SSL_COMP **a, const SSL_COMP **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(SSL_COMP) *, sk),              \
-      CHECKED_CAST(stack_cmp_func,                                   \
-                   int (*)(const SSL_COMP **a, const SSL_COMP **b), comp)))
+#define sk_SSL_COMP_set_cmp_func(sk, comp)                                    \
+  ((int(OPENSSL_CDECL *)(const SSL_COMP **a, const SSL_COMP **b))             \
+       sk_set_cmp_func(CHECKED_CAST(_STACK *, STACK_OF(SSL_COMP) *, sk),      \
+                       CHECKED_CAST(stack_cmp_func,                           \
+                                    int(OPENSSL_CDECL *)(const SSL_COMP **a,  \
+                                                         const SSL_COMP **b), \
+                                    comp)))
 
 #define sk_SSL_COMP_deep_copy(sk, copy_func, free_func)                      \
   ((STACK_OF(SSL_COMP) *)sk_deep_copy(                                       \
@@ -1958,11 +2023,12 @@
       CHECKED_CAST(void (*)(void *), void (*)(SSL_COMP *), free_func)))
 
 /* SSL_CUSTOM_EXTENSION */
-#define sk_SSL_CUSTOM_EXTENSION_new(comp)                                      \
-  ((STACK_OF(SSL_CUSTOM_EXTENSION) *)sk_new(CHECKED_CAST(                      \
-      stack_cmp_func,                                                          \
-      int (*)(const SSL_CUSTOM_EXTENSION **a, const SSL_CUSTOM_EXTENSION **b), \
-      comp)))
+#define sk_SSL_CUSTOM_EXTENSION_new(comp)                                \
+  ((STACK_OF(SSL_CUSTOM_EXTENSION) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                       \
+                   int(OPENSSL_CDECL *)(const SSL_CUSTOM_EXTENSION **a,  \
+                                        const SSL_CUSTOM_EXTENSION **b), \
+                   comp)))
 
 #define sk_SSL_CUSTOM_EXTENSION_new_null() \
   ((STACK_OF(SSL_CUSTOM_EXTENSION) *)sk_new_null())
@@ -2033,13 +2099,14 @@
   sk_is_sorted(CHECKED_CAST(const _STACK *,   \
                             const STACK_OF(SSL_CUSTOM_EXTENSION) *, sk))
 
-#define sk_SSL_CUSTOM_EXTENSION_set_cmp_func(sk, comp)                       \
-  ((int (*)(const SSL_CUSTOM_EXTENSION **a, const SSL_CUSTOM_EXTENSION **b)) \
-       sk_set_cmp_func(                                                      \
-           CHECKED_CAST(_STACK *, STACK_OF(SSL_CUSTOM_EXTENSION) *, sk),     \
-           CHECKED_CAST(stack_cmp_func,                                      \
-                        int (*)(const SSL_CUSTOM_EXTENSION **a,              \
-                                const SSL_CUSTOM_EXTENSION **b),             \
+#define sk_SSL_CUSTOM_EXTENSION_set_cmp_func(sk, comp)                        \
+  ((int(OPENSSL_CDECL *)(const SSL_CUSTOM_EXTENSION **a,                      \
+                         const SSL_CUSTOM_EXTENSION **b))                     \
+       sk_set_cmp_func(                                                       \
+           CHECKED_CAST(_STACK *, STACK_OF(SSL_CUSTOM_EXTENSION) *, sk),      \
+           CHECKED_CAST(stack_cmp_func,                                       \
+                        int(OPENSSL_CDECL *)(const SSL_CUSTOM_EXTENSION **a,  \
+                                             const SSL_CUSTOM_EXTENSION **b), \
                         comp)))
 
 #define sk_SSL_CUSTOM_EXTENSION_deep_copy(sk, copy_func, free_func)        \
@@ -2053,11 +2120,12 @@
                    free_func)))
 
 /* STACK_OF_X509_NAME_ENTRY */
-#define sk_STACK_OF_X509_NAME_ENTRY_new(comp)                      \
-  ((STACK_OF(STACK_OF_X509_NAME_ENTRY) *)sk_new(CHECKED_CAST(      \
-      stack_cmp_func, int (*)(const STACK_OF_X509_NAME_ENTRY **a,  \
-                              const STACK_OF_X509_NAME_ENTRY **b), \
-      comp)))
+#define sk_STACK_OF_X509_NAME_ENTRY_new(comp)                                \
+  ((STACK_OF(STACK_OF_X509_NAME_ENTRY) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                           \
+                   int(OPENSSL_CDECL *)(const STACK_OF_X509_NAME_ENTRY **a,  \
+                                        const STACK_OF_X509_NAME_ENTRY **b), \
+                   comp)))
 
 #define sk_STACK_OF_X509_NAME_ENTRY_new_null() \
   ((STACK_OF(STACK_OF_X509_NAME_ENTRY) *)sk_new_null())
@@ -2131,14 +2199,15 @@
                             const STACK_OF(STACK_OF_X509_NAME_ENTRY) *, sk))
 
 #define sk_STACK_OF_X509_NAME_ENTRY_set_cmp_func(sk, comp)                   \
-  ((int (*)(const STACK_OF_X509_NAME_ENTRY **a,                              \
-            const STACK_OF_X509_NAME_ENTRY **b))                             \
+  ((int(OPENSSL_CDECL *)(const STACK_OF_X509_NAME_ENTRY **a,                 \
+                         const STACK_OF_X509_NAME_ENTRY **b))                \
        sk_set_cmp_func(                                                      \
            CHECKED_CAST(_STACK *, STACK_OF(STACK_OF_X509_NAME_ENTRY) *, sk), \
-           CHECKED_CAST(stack_cmp_func,                                      \
-                        int (*)(const STACK_OF_X509_NAME_ENTRY **a,          \
-                                const STACK_OF_X509_NAME_ENTRY **b),         \
-                        comp)))
+           CHECKED_CAST(                                                     \
+               stack_cmp_func,                                               \
+               int(OPENSSL_CDECL *)(const STACK_OF_X509_NAME_ENTRY **a,      \
+                                    const STACK_OF_X509_NAME_ENTRY **b),     \
+               comp)))
 
 #define sk_STACK_OF_X509_NAME_ENTRY_deep_copy(sk, copy_func, free_func)        \
   ((STACK_OF(STACK_OF_X509_NAME_ENTRY) *)sk_deep_copy(                         \
@@ -2153,7 +2222,8 @@
 /* SXNETID */
 #define sk_SXNETID_new(comp)                 \
   ((STACK_OF(SXNETID) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func, int (*)(const SXNETID **a, const SXNETID **b), comp)))
+      stack_cmp_func,                        \
+      int(OPENSSL_CDECL *)(const SXNETID **a, const SXNETID **b), comp)))
 
 #define sk_SXNETID_new_null() ((STACK_OF(SXNETID) *)sk_new_null())
 
@@ -2214,11 +2284,13 @@
 #define sk_SXNETID_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(SXNETID) *, sk))
 
-#define sk_SXNETID_set_cmp_func(sk, comp)                          \
-  ((int (*)(const SXNETID **a, const SXNETID **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(SXNETID) *, sk),             \
-      CHECKED_CAST(stack_cmp_func,                                 \
-                   int (*)(const SXNETID **a, const SXNETID **b), comp)))
+#define sk_SXNETID_set_cmp_func(sk, comp)                                    \
+  ((int(OPENSSL_CDECL *)(const SXNETID **a, const SXNETID **b))              \
+       sk_set_cmp_func(CHECKED_CAST(_STACK *, STACK_OF(SXNETID) *, sk),      \
+                       CHECKED_CAST(stack_cmp_func,                          \
+                                    int(OPENSSL_CDECL *)(const SXNETID **a,  \
+                                                         const SXNETID **b), \
+                                    comp)))
 
 #define sk_SXNETID_deep_copy(sk, copy_func, free_func)                     \
   ((STACK_OF(SXNETID) *)sk_deep_copy(                                      \
@@ -2227,9 +2299,10 @@
       CHECKED_CAST(void (*)(void *), void (*)(SXNETID *), free_func)))
 
 /* X509 */
-#define sk_X509_new(comp)                 \
-  ((STACK_OF(X509) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func, int (*)(const X509 **a, const X509 **b), comp)))
+#define sk_X509_new(comp)                                                   \
+  ((STACK_OF(X509) *)sk_new(CHECKED_CAST(                                   \
+      stack_cmp_func, int(OPENSSL_CDECL *)(const X509 **a, const X509 **b), \
+      comp)))
 
 #define sk_X509_new_null() ((STACK_OF(X509) *)sk_new_null())
 
@@ -2286,10 +2359,11 @@
 #define sk_X509_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(X509) *, sk))
 
-#define sk_X509_set_cmp_func(sk, comp)                                      \
-  ((int (*)(const X509 **a, const X509 **b))sk_set_cmp_func(                \
-      CHECKED_CAST(_STACK *, STACK_OF(X509) *, sk),                         \
-      CHECKED_CAST(stack_cmp_func, int (*)(const X509 **a, const X509 **b), \
+#define sk_X509_set_cmp_func(sk, comp)                                    \
+  ((int(OPENSSL_CDECL *)(const X509 **a, const X509 **b))sk_set_cmp_func( \
+      CHECKED_CAST(_STACK *, STACK_OF(X509) *, sk),                       \
+      CHECKED_CAST(stack_cmp_func,                                        \
+                   int(OPENSSL_CDECL *)(const X509 **a, const X509 **b),  \
                    comp)))
 
 #define sk_X509_deep_copy(sk, copy_func, free_func)                  \
@@ -2299,11 +2373,12 @@
       CHECKED_CAST(void (*)(void *), void (*)(X509 *), free_func)))
 
 /* X509V3_EXT_METHOD */
-#define sk_X509V3_EXT_METHOD_new(comp)                                   \
-  ((STACK_OF(X509V3_EXT_METHOD) *)sk_new(CHECKED_CAST(                   \
-      stack_cmp_func,                                                    \
-      int (*)(const X509V3_EXT_METHOD **a, const X509V3_EXT_METHOD **b), \
-      comp)))
+#define sk_X509V3_EXT_METHOD_new(comp)                                \
+  ((STACK_OF(X509V3_EXT_METHOD) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                    \
+                   int(OPENSSL_CDECL *)(const X509V3_EXT_METHOD **a,  \
+                                        const X509V3_EXT_METHOD **b), \
+                   comp)))
 
 #define sk_X509V3_EXT_METHOD_new_null() \
   ((STACK_OF(X509V3_EXT_METHOD) *)sk_new_null())
@@ -2372,12 +2447,14 @@
   sk_is_sorted(                            \
       CHECKED_CAST(const _STACK *, const STACK_OF(X509V3_EXT_METHOD) *, sk))
 
-#define sk_X509V3_EXT_METHOD_set_cmp_func(sk, comp)                           \
-  ((int (*)(const X509V3_EXT_METHOD **a, const X509V3_EXT_METHOD **b))        \
-       sk_set_cmp_func(                                                       \
-           CHECKED_CAST(_STACK *, STACK_OF(X509V3_EXT_METHOD) *, sk),         \
-           CHECKED_CAST(stack_cmp_func, int (*)(const X509V3_EXT_METHOD **a,  \
-                                                const X509V3_EXT_METHOD **b), \
+#define sk_X509V3_EXT_METHOD_set_cmp_func(sk, comp)                        \
+  ((int(OPENSSL_CDECL *)(const X509V3_EXT_METHOD **a,                      \
+                         const X509V3_EXT_METHOD **b))                     \
+       sk_set_cmp_func(                                                    \
+           CHECKED_CAST(_STACK *, STACK_OF(X509V3_EXT_METHOD) *, sk),      \
+           CHECKED_CAST(stack_cmp_func,                                    \
+                        int(OPENSSL_CDECL *)(const X509V3_EXT_METHOD **a,  \
+                                             const X509V3_EXT_METHOD **b), \
                         comp)))
 
 #define sk_X509V3_EXT_METHOD_deep_copy(sk, copy_func, free_func)             \
@@ -2389,9 +2466,10 @@
                    free_func)))
 
 /* X509_ALGOR */
-#define sk_X509_ALGOR_new(comp)                                            \
-  ((STACK_OF(X509_ALGOR) *)sk_new(CHECKED_CAST(                            \
-      stack_cmp_func, int (*)(const X509_ALGOR **a, const X509_ALGOR **b), \
+#define sk_X509_ALGOR_new(comp)                                         \
+  ((STACK_OF(X509_ALGOR) *)sk_new(CHECKED_CAST(                         \
+      stack_cmp_func,                                                   \
+      int(OPENSSL_CDECL *)(const X509_ALGOR **a, const X509_ALGOR **b), \
       comp)))
 
 #define sk_X509_ALGOR_new_null() ((STACK_OF(X509_ALGOR) *)sk_new_null())
@@ -2455,12 +2533,14 @@
 #define sk_X509_ALGOR_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(X509_ALGOR) *, sk))
 
-#define sk_X509_ALGOR_set_cmp_func(sk, comp)                             \
-  ((int (*)(const X509_ALGOR **a, const X509_ALGOR **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(X509_ALGOR) *, sk),                \
-      CHECKED_CAST(stack_cmp_func,                                       \
-                   int (*)(const X509_ALGOR **a, const X509_ALGOR **b),  \
-                   comp)))
+#define sk_X509_ALGOR_set_cmp_func(sk, comp)                          \
+  ((int(OPENSSL_CDECL *)(const X509_ALGOR **a, const X509_ALGOR **b)) \
+       sk_set_cmp_func(                                               \
+           CHECKED_CAST(_STACK *, STACK_OF(X509_ALGOR) *, sk),        \
+           CHECKED_CAST(stack_cmp_func,                               \
+                        int(OPENSSL_CDECL *)(const X509_ALGOR **a,    \
+                                             const X509_ALGOR **b),   \
+                        comp)))
 
 #define sk_X509_ALGOR_deep_copy(sk, copy_func, free_func)             \
   ((STACK_OF(X509_ALGOR) *)sk_deep_copy(                              \
@@ -2470,10 +2550,12 @@
       CHECKED_CAST(void (*)(void *), void (*)(X509_ALGOR *), free_func)))
 
 /* X509_ATTRIBUTE */
-#define sk_X509_ATTRIBUTE_new(comp)                 \
-  ((STACK_OF(X509_ATTRIBUTE) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func,                               \
-      int (*)(const X509_ATTRIBUTE **a, const X509_ATTRIBUTE **b), comp)))
+#define sk_X509_ATTRIBUTE_new(comp)                                \
+  ((STACK_OF(X509_ATTRIBUTE) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                 \
+                   int(OPENSSL_CDECL *)(const X509_ATTRIBUTE **a,  \
+                                        const X509_ATTRIBUTE **b), \
+                   comp)))
 
 #define sk_X509_ATTRIBUTE_new_null() ((STACK_OF(X509_ATTRIBUTE) *)sk_new_null())
 
@@ -2541,12 +2623,13 @@
   sk_is_sorted(                         \
       CHECKED_CAST(const _STACK *, const STACK_OF(X509_ATTRIBUTE) *, sk))
 
-#define sk_X509_ATTRIBUTE_set_cmp_func(sk, comp)                           \
-  ((int (*)(const X509_ATTRIBUTE **a, const X509_ATTRIBUTE **b))           \
-       sk_set_cmp_func(                                                    \
-           CHECKED_CAST(_STACK *, STACK_OF(X509_ATTRIBUTE) *, sk),         \
-           CHECKED_CAST(stack_cmp_func, int (*)(const X509_ATTRIBUTE **a,  \
-                                                const X509_ATTRIBUTE **b), \
+#define sk_X509_ATTRIBUTE_set_cmp_func(sk, comp)                              \
+  ((int(OPENSSL_CDECL *)(const X509_ATTRIBUTE **a, const X509_ATTRIBUTE **b)) \
+       sk_set_cmp_func(                                                       \
+           CHECKED_CAST(_STACK *, STACK_OF(X509_ATTRIBUTE) *, sk),            \
+           CHECKED_CAST(stack_cmp_func,                                       \
+                        int(OPENSSL_CDECL *)(const X509_ATTRIBUTE **a,        \
+                                             const X509_ATTRIBUTE **b),       \
                         comp)))
 
 #define sk_X509_ATTRIBUTE_deep_copy(sk, copy_func, free_func)                \
@@ -2559,7 +2642,8 @@
 /* X509_CRL */
 #define sk_X509_CRL_new(comp)                 \
   ((STACK_OF(X509_CRL) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func, int (*)(const X509_CRL **a, const X509_CRL **b), comp)))
+      stack_cmp_func,                         \
+      int(OPENSSL_CDECL *)(const X509_CRL **a, const X509_CRL **b), comp)))
 
 #define sk_X509_CRL_new_null() ((STACK_OF(X509_CRL) *)sk_new_null())
 
@@ -2620,11 +2704,13 @@
 #define sk_X509_CRL_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(X509_CRL) *, sk))
 
-#define sk_X509_CRL_set_cmp_func(sk, comp)                           \
-  ((int (*)(const X509_CRL **a, const X509_CRL **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(X509_CRL) *, sk),              \
-      CHECKED_CAST(stack_cmp_func,                                   \
-                   int (*)(const X509_CRL **a, const X509_CRL **b), comp)))
+#define sk_X509_CRL_set_cmp_func(sk, comp)                                    \
+  ((int(OPENSSL_CDECL *)(const X509_CRL **a, const X509_CRL **b))             \
+       sk_set_cmp_func(CHECKED_CAST(_STACK *, STACK_OF(X509_CRL) *, sk),      \
+                       CHECKED_CAST(stack_cmp_func,                           \
+                                    int(OPENSSL_CDECL *)(const X509_CRL **a,  \
+                                                         const X509_CRL **b), \
+                                    comp)))
 
 #define sk_X509_CRL_deep_copy(sk, copy_func, free_func)                      \
   ((STACK_OF(X509_CRL) *)sk_deep_copy(                                       \
@@ -2633,10 +2719,12 @@
       CHECKED_CAST(void (*)(void *), void (*)(X509_CRL *), free_func)))
 
 /* X509_EXTENSION */
-#define sk_X509_EXTENSION_new(comp)                 \
-  ((STACK_OF(X509_EXTENSION) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func,                               \
-      int (*)(const X509_EXTENSION **a, const X509_EXTENSION **b), comp)))
+#define sk_X509_EXTENSION_new(comp)                                \
+  ((STACK_OF(X509_EXTENSION) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                 \
+                   int(OPENSSL_CDECL *)(const X509_EXTENSION **a,  \
+                                        const X509_EXTENSION **b), \
+                   comp)))
 
 #define sk_X509_EXTENSION_new_null() ((STACK_OF(X509_EXTENSION) *)sk_new_null())
 
@@ -2704,12 +2792,13 @@
   sk_is_sorted(                         \
       CHECKED_CAST(const _STACK *, const STACK_OF(X509_EXTENSION) *, sk))
 
-#define sk_X509_EXTENSION_set_cmp_func(sk, comp)                           \
-  ((int (*)(const X509_EXTENSION **a, const X509_EXTENSION **b))           \
-       sk_set_cmp_func(                                                    \
-           CHECKED_CAST(_STACK *, STACK_OF(X509_EXTENSION) *, sk),         \
-           CHECKED_CAST(stack_cmp_func, int (*)(const X509_EXTENSION **a,  \
-                                                const X509_EXTENSION **b), \
+#define sk_X509_EXTENSION_set_cmp_func(sk, comp)                              \
+  ((int(OPENSSL_CDECL *)(const X509_EXTENSION **a, const X509_EXTENSION **b)) \
+       sk_set_cmp_func(                                                       \
+           CHECKED_CAST(_STACK *, STACK_OF(X509_EXTENSION) *, sk),            \
+           CHECKED_CAST(stack_cmp_func,                                       \
+                        int(OPENSSL_CDECL *)(const X509_EXTENSION **a,        \
+                                             const X509_EXTENSION **b),       \
                         comp)))
 
 #define sk_X509_EXTENSION_deep_copy(sk, copy_func, free_func)                \
@@ -2720,10 +2809,10 @@
       CHECKED_CAST(void (*)(void *), void (*)(X509_EXTENSION *), free_func)))
 
 /* X509_INFO */
-#define sk_X509_INFO_new(comp)     \
-  ((STACK_OF(X509_INFO) *)sk_new(  \
-      CHECKED_CAST(stack_cmp_func, \
-                   int (*)(const X509_INFO **a, const X509_INFO **b), comp)))
+#define sk_X509_INFO_new(comp)                 \
+  ((STACK_OF(X509_INFO) *)sk_new(CHECKED_CAST( \
+      stack_cmp_func,                          \
+      int(OPENSSL_CDECL *)(const X509_INFO **a, const X509_INFO **b), comp)))
 
 #define sk_X509_INFO_new_null() ((STACK_OF(X509_INFO) *)sk_new_null())
 
@@ -2786,11 +2875,13 @@
 #define sk_X509_INFO_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(X509_INFO) *, sk))
 
-#define sk_X509_INFO_set_cmp_func(sk, comp)                            \
-  ((int (*)(const X509_INFO **a, const X509_INFO **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(X509_INFO) *, sk),               \
-      CHECKED_CAST(stack_cmp_func,                                     \
-                   int (*)(const X509_INFO **a, const X509_INFO **b), comp)))
+#define sk_X509_INFO_set_cmp_func(sk, comp)                                    \
+  ((int(OPENSSL_CDECL *)(const X509_INFO **a, const X509_INFO **b))            \
+       sk_set_cmp_func(CHECKED_CAST(_STACK *, STACK_OF(X509_INFO) *, sk),      \
+                       CHECKED_CAST(stack_cmp_func,                            \
+                                    int(OPENSSL_CDECL *)(const X509_INFO **a,  \
+                                                         const X509_INFO **b), \
+                                    comp)))
 
 #define sk_X509_INFO_deep_copy(sk, copy_func, free_func)                       \
   ((STACK_OF(X509_INFO) *)sk_deep_copy(                                        \
@@ -2799,9 +2890,10 @@
       CHECKED_CAST(void (*)(void *), void (*)(X509_INFO *), free_func)))
 
 /* X509_LOOKUP */
-#define sk_X509_LOOKUP_new(comp)                                             \
-  ((STACK_OF(X509_LOOKUP) *)sk_new(CHECKED_CAST(                             \
-      stack_cmp_func, int (*)(const X509_LOOKUP **a, const X509_LOOKUP **b), \
+#define sk_X509_LOOKUP_new(comp)                                          \
+  ((STACK_OF(X509_LOOKUP) *)sk_new(CHECKED_CAST(                          \
+      stack_cmp_func,                                                     \
+      int(OPENSSL_CDECL *)(const X509_LOOKUP **a, const X509_LOOKUP **b), \
       comp)))
 
 #define sk_X509_LOOKUP_new_null() ((STACK_OF(X509_LOOKUP) *)sk_new_null())
@@ -2865,12 +2957,14 @@
 #define sk_X509_LOOKUP_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(X509_LOOKUP) *, sk))
 
-#define sk_X509_LOOKUP_set_cmp_func(sk, comp)                              \
-  ((int (*)(const X509_LOOKUP **a, const X509_LOOKUP **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(X509_LOOKUP) *, sk),                 \
-      CHECKED_CAST(stack_cmp_func,                                         \
-                   int (*)(const X509_LOOKUP **a, const X509_LOOKUP **b),  \
-                   comp)))
+#define sk_X509_LOOKUP_set_cmp_func(sk, comp)                           \
+  ((int(OPENSSL_CDECL *)(const X509_LOOKUP **a, const X509_LOOKUP **b)) \
+       sk_set_cmp_func(                                                 \
+           CHECKED_CAST(_STACK *, STACK_OF(X509_LOOKUP) *, sk),         \
+           CHECKED_CAST(stack_cmp_func,                                 \
+                        int(OPENSSL_CDECL *)(const X509_LOOKUP **a,     \
+                                             const X509_LOOKUP **b),    \
+                        comp)))
 
 #define sk_X509_LOOKUP_deep_copy(sk, copy_func, free_func)             \
   ((STACK_OF(X509_LOOKUP) *)sk_deep_copy(                              \
@@ -2880,10 +2974,10 @@
       CHECKED_CAST(void (*)(void *), void (*)(X509_LOOKUP *), free_func)))
 
 /* X509_NAME */
-#define sk_X509_NAME_new(comp)     \
-  ((STACK_OF(X509_NAME) *)sk_new(  \
-      CHECKED_CAST(stack_cmp_func, \
-                   int (*)(const X509_NAME **a, const X509_NAME **b), comp)))
+#define sk_X509_NAME_new(comp)                 \
+  ((STACK_OF(X509_NAME) *)sk_new(CHECKED_CAST( \
+      stack_cmp_func,                          \
+      int(OPENSSL_CDECL *)(const X509_NAME **a, const X509_NAME **b), comp)))
 
 #define sk_X509_NAME_new_null() ((STACK_OF(X509_NAME) *)sk_new_null())
 
@@ -2946,11 +3040,13 @@
 #define sk_X509_NAME_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(X509_NAME) *, sk))
 
-#define sk_X509_NAME_set_cmp_func(sk, comp)                            \
-  ((int (*)(const X509_NAME **a, const X509_NAME **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(X509_NAME) *, sk),               \
-      CHECKED_CAST(stack_cmp_func,                                     \
-                   int (*)(const X509_NAME **a, const X509_NAME **b), comp)))
+#define sk_X509_NAME_set_cmp_func(sk, comp)                                    \
+  ((int(OPENSSL_CDECL *)(const X509_NAME **a, const X509_NAME **b))            \
+       sk_set_cmp_func(CHECKED_CAST(_STACK *, STACK_OF(X509_NAME) *, sk),      \
+                       CHECKED_CAST(stack_cmp_func,                            \
+                                    int(OPENSSL_CDECL *)(const X509_NAME **a,  \
+                                                         const X509_NAME **b), \
+                                    comp)))
 
 #define sk_X509_NAME_deep_copy(sk, copy_func, free_func)                       \
   ((STACK_OF(X509_NAME) *)sk_deep_copy(                                        \
@@ -2959,10 +3055,12 @@
       CHECKED_CAST(void (*)(void *), void (*)(X509_NAME *), free_func)))
 
 /* X509_NAME_ENTRY */
-#define sk_X509_NAME_ENTRY_new(comp)                 \
-  ((STACK_OF(X509_NAME_ENTRY) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func,                                \
-      int (*)(const X509_NAME_ENTRY **a, const X509_NAME_ENTRY **b), comp)))
+#define sk_X509_NAME_ENTRY_new(comp)                                \
+  ((STACK_OF(X509_NAME_ENTRY) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                  \
+                   int(OPENSSL_CDECL *)(const X509_NAME_ENTRY **a,  \
+                                        const X509_NAME_ENTRY **b), \
+                   comp)))
 
 #define sk_X509_NAME_ENTRY_new_null() \
   ((STACK_OF(X509_NAME_ENTRY) *)sk_new_null())
@@ -3031,12 +3129,14 @@
   sk_is_sorted(                          \
       CHECKED_CAST(const _STACK *, const STACK_OF(X509_NAME_ENTRY) *, sk))
 
-#define sk_X509_NAME_ENTRY_set_cmp_func(sk, comp)                           \
-  ((int (*)(const X509_NAME_ENTRY **a, const X509_NAME_ENTRY **b))          \
-       sk_set_cmp_func(                                                     \
-           CHECKED_CAST(_STACK *, STACK_OF(X509_NAME_ENTRY) *, sk),         \
-           CHECKED_CAST(stack_cmp_func, int (*)(const X509_NAME_ENTRY **a,  \
-                                                const X509_NAME_ENTRY **b), \
+#define sk_X509_NAME_ENTRY_set_cmp_func(sk, comp)                        \
+  ((int(OPENSSL_CDECL *)(const X509_NAME_ENTRY **a,                      \
+                         const X509_NAME_ENTRY **b))                     \
+       sk_set_cmp_func(                                                  \
+           CHECKED_CAST(_STACK *, STACK_OF(X509_NAME_ENTRY) *, sk),      \
+           CHECKED_CAST(stack_cmp_func,                                  \
+                        int(OPENSSL_CDECL *)(const X509_NAME_ENTRY **a,  \
+                                             const X509_NAME_ENTRY **b), \
                         comp)))
 
 #define sk_X509_NAME_ENTRY_deep_copy(sk, copy_func, free_func)                 \
@@ -3047,9 +3147,10 @@
       CHECKED_CAST(void (*)(void *), void (*)(X509_NAME_ENTRY *), free_func)))
 
 /* X509_OBJECT */
-#define sk_X509_OBJECT_new(comp)                                             \
-  ((STACK_OF(X509_OBJECT) *)sk_new(CHECKED_CAST(                             \
-      stack_cmp_func, int (*)(const X509_OBJECT **a, const X509_OBJECT **b), \
+#define sk_X509_OBJECT_new(comp)                                          \
+  ((STACK_OF(X509_OBJECT) *)sk_new(CHECKED_CAST(                          \
+      stack_cmp_func,                                                     \
+      int(OPENSSL_CDECL *)(const X509_OBJECT **a, const X509_OBJECT **b), \
       comp)))
 
 #define sk_X509_OBJECT_new_null() ((STACK_OF(X509_OBJECT) *)sk_new_null())
@@ -3113,12 +3214,14 @@
 #define sk_X509_OBJECT_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(X509_OBJECT) *, sk))
 
-#define sk_X509_OBJECT_set_cmp_func(sk, comp)                              \
-  ((int (*)(const X509_OBJECT **a, const X509_OBJECT **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(X509_OBJECT) *, sk),                 \
-      CHECKED_CAST(stack_cmp_func,                                         \
-                   int (*)(const X509_OBJECT **a, const X509_OBJECT **b),  \
-                   comp)))
+#define sk_X509_OBJECT_set_cmp_func(sk, comp)                           \
+  ((int(OPENSSL_CDECL *)(const X509_OBJECT **a, const X509_OBJECT **b)) \
+       sk_set_cmp_func(                                                 \
+           CHECKED_CAST(_STACK *, STACK_OF(X509_OBJECT) *, sk),         \
+           CHECKED_CAST(stack_cmp_func,                                 \
+                        int(OPENSSL_CDECL *)(const X509_OBJECT **a,     \
+                                             const X509_OBJECT **b),    \
+                        comp)))
 
 #define sk_X509_OBJECT_deep_copy(sk, copy_func, free_func)             \
   ((STACK_OF(X509_OBJECT) *)sk_deep_copy(                              \
@@ -3128,10 +3231,12 @@
       CHECKED_CAST(void (*)(void *), void (*)(X509_OBJECT *), free_func)))
 
 /* X509_POLICY_DATA */
-#define sk_X509_POLICY_DATA_new(comp)                 \
-  ((STACK_OF(X509_POLICY_DATA) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func,                                 \
-      int (*)(const X509_POLICY_DATA **a, const X509_POLICY_DATA **b), comp)))
+#define sk_X509_POLICY_DATA_new(comp)                                \
+  ((STACK_OF(X509_POLICY_DATA) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                   \
+                   int(OPENSSL_CDECL *)(const X509_POLICY_DATA **a,  \
+                                        const X509_POLICY_DATA **b), \
+                   comp)))
 
 #define sk_X509_POLICY_DATA_new_null() \
   ((STACK_OF(X509_POLICY_DATA) *)sk_new_null())
@@ -3200,12 +3305,14 @@
   sk_is_sorted(                           \
       CHECKED_CAST(const _STACK *, const STACK_OF(X509_POLICY_DATA) *, sk))
 
-#define sk_X509_POLICY_DATA_set_cmp_func(sk, comp)                           \
-  ((int (*)(const X509_POLICY_DATA **a, const X509_POLICY_DATA **b))         \
-       sk_set_cmp_func(                                                      \
-           CHECKED_CAST(_STACK *, STACK_OF(X509_POLICY_DATA) *, sk),         \
-           CHECKED_CAST(stack_cmp_func, int (*)(const X509_POLICY_DATA **a,  \
-                                                const X509_POLICY_DATA **b), \
+#define sk_X509_POLICY_DATA_set_cmp_func(sk, comp)                        \
+  ((int(OPENSSL_CDECL *)(const X509_POLICY_DATA **a,                      \
+                         const X509_POLICY_DATA **b))                     \
+       sk_set_cmp_func(                                                   \
+           CHECKED_CAST(_STACK *, STACK_OF(X509_POLICY_DATA) *, sk),      \
+           CHECKED_CAST(stack_cmp_func,                                   \
+                        int(OPENSSL_CDECL *)(const X509_POLICY_DATA **a,  \
+                                             const X509_POLICY_DATA **b), \
                         comp)))
 
 #define sk_X509_POLICY_DATA_deep_copy(sk, copy_func, free_func)             \
@@ -3217,10 +3324,12 @@
                    free_func)))
 
 /* X509_POLICY_NODE */
-#define sk_X509_POLICY_NODE_new(comp)                 \
-  ((STACK_OF(X509_POLICY_NODE) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func,                                 \
-      int (*)(const X509_POLICY_NODE **a, const X509_POLICY_NODE **b), comp)))
+#define sk_X509_POLICY_NODE_new(comp)                                \
+  ((STACK_OF(X509_POLICY_NODE) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                   \
+                   int(OPENSSL_CDECL *)(const X509_POLICY_NODE **a,  \
+                                        const X509_POLICY_NODE **b), \
+                   comp)))
 
 #define sk_X509_POLICY_NODE_new_null() \
   ((STACK_OF(X509_POLICY_NODE) *)sk_new_null())
@@ -3289,12 +3398,14 @@
   sk_is_sorted(                           \
       CHECKED_CAST(const _STACK *, const STACK_OF(X509_POLICY_NODE) *, sk))
 
-#define sk_X509_POLICY_NODE_set_cmp_func(sk, comp)                           \
-  ((int (*)(const X509_POLICY_NODE **a, const X509_POLICY_NODE **b))         \
-       sk_set_cmp_func(                                                      \
-           CHECKED_CAST(_STACK *, STACK_OF(X509_POLICY_NODE) *, sk),         \
-           CHECKED_CAST(stack_cmp_func, int (*)(const X509_POLICY_NODE **a,  \
-                                                const X509_POLICY_NODE **b), \
+#define sk_X509_POLICY_NODE_set_cmp_func(sk, comp)                        \
+  ((int(OPENSSL_CDECL *)(const X509_POLICY_NODE **a,                      \
+                         const X509_POLICY_NODE **b))                     \
+       sk_set_cmp_func(                                                   \
+           CHECKED_CAST(_STACK *, STACK_OF(X509_POLICY_NODE) *, sk),      \
+           CHECKED_CAST(stack_cmp_func,                                   \
+                        int(OPENSSL_CDECL *)(const X509_POLICY_NODE **a,  \
+                                             const X509_POLICY_NODE **b), \
                         comp)))
 
 #define sk_X509_POLICY_NODE_deep_copy(sk, copy_func, free_func)             \
@@ -3306,9 +3417,10 @@
                    free_func)))
 
 /* X509_PURPOSE */
-#define sk_X509_PURPOSE_new(comp)                                              \
-  ((STACK_OF(X509_PURPOSE) *)sk_new(CHECKED_CAST(                              \
-      stack_cmp_func, int (*)(const X509_PURPOSE **a, const X509_PURPOSE **b), \
+#define sk_X509_PURPOSE_new(comp)                                           \
+  ((STACK_OF(X509_PURPOSE) *)sk_new(CHECKED_CAST(                           \
+      stack_cmp_func,                                                       \
+      int(OPENSSL_CDECL *)(const X509_PURPOSE **a, const X509_PURPOSE **b), \
       comp)))
 
 #define sk_X509_PURPOSE_new_null() ((STACK_OF(X509_PURPOSE) *)sk_new_null())
@@ -3374,12 +3486,14 @@
 #define sk_X509_PURPOSE_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(X509_PURPOSE) *, sk))
 
-#define sk_X509_PURPOSE_set_cmp_func(sk, comp)                               \
-  ((int (*)(const X509_PURPOSE **a, const X509_PURPOSE **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(X509_PURPOSE) *, sk),                  \
-      CHECKED_CAST(stack_cmp_func,                                           \
-                   int (*)(const X509_PURPOSE **a, const X509_PURPOSE **b),  \
-                   comp)))
+#define sk_X509_PURPOSE_set_cmp_func(sk, comp)                            \
+  ((int(OPENSSL_CDECL *)(const X509_PURPOSE **a, const X509_PURPOSE **b)) \
+       sk_set_cmp_func(                                                   \
+           CHECKED_CAST(_STACK *, STACK_OF(X509_PURPOSE) *, sk),          \
+           CHECKED_CAST(stack_cmp_func,                                   \
+                        int(OPENSSL_CDECL *)(const X509_PURPOSE **a,      \
+                                             const X509_PURPOSE **b),     \
+                        comp)))
 
 #define sk_X509_PURPOSE_deep_copy(sk, copy_func, free_func)              \
   ((STACK_OF(X509_PURPOSE) *)sk_deep_copy(                               \
@@ -3389,9 +3503,10 @@
       CHECKED_CAST(void (*)(void *), void (*)(X509_PURPOSE *), free_func)))
 
 /* X509_REVOKED */
-#define sk_X509_REVOKED_new(comp)                                              \
-  ((STACK_OF(X509_REVOKED) *)sk_new(CHECKED_CAST(                              \
-      stack_cmp_func, int (*)(const X509_REVOKED **a, const X509_REVOKED **b), \
+#define sk_X509_REVOKED_new(comp)                                           \
+  ((STACK_OF(X509_REVOKED) *)sk_new(CHECKED_CAST(                           \
+      stack_cmp_func,                                                       \
+      int(OPENSSL_CDECL *)(const X509_REVOKED **a, const X509_REVOKED **b), \
       comp)))
 
 #define sk_X509_REVOKED_new_null() ((STACK_OF(X509_REVOKED) *)sk_new_null())
@@ -3457,12 +3572,14 @@
 #define sk_X509_REVOKED_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(X509_REVOKED) *, sk))
 
-#define sk_X509_REVOKED_set_cmp_func(sk, comp)                               \
-  ((int (*)(const X509_REVOKED **a, const X509_REVOKED **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(X509_REVOKED) *, sk),                  \
-      CHECKED_CAST(stack_cmp_func,                                           \
-                   int (*)(const X509_REVOKED **a, const X509_REVOKED **b),  \
-                   comp)))
+#define sk_X509_REVOKED_set_cmp_func(sk, comp)                            \
+  ((int(OPENSSL_CDECL *)(const X509_REVOKED **a, const X509_REVOKED **b)) \
+       sk_set_cmp_func(                                                   \
+           CHECKED_CAST(_STACK *, STACK_OF(X509_REVOKED) *, sk),          \
+           CHECKED_CAST(stack_cmp_func,                                   \
+                        int(OPENSSL_CDECL *)(const X509_REVOKED **a,      \
+                                             const X509_REVOKED **b),     \
+                        comp)))
 
 #define sk_X509_REVOKED_deep_copy(sk, copy_func, free_func)              \
   ((STACK_OF(X509_REVOKED) *)sk_deep_copy(                               \
@@ -3472,9 +3589,10 @@
       CHECKED_CAST(void (*)(void *), void (*)(X509_REVOKED *), free_func)))
 
 /* X509_TRUST */
-#define sk_X509_TRUST_new(comp)                                            \
-  ((STACK_OF(X509_TRUST) *)sk_new(CHECKED_CAST(                            \
-      stack_cmp_func, int (*)(const X509_TRUST **a, const X509_TRUST **b), \
+#define sk_X509_TRUST_new(comp)                                         \
+  ((STACK_OF(X509_TRUST) *)sk_new(CHECKED_CAST(                         \
+      stack_cmp_func,                                                   \
+      int(OPENSSL_CDECL *)(const X509_TRUST **a, const X509_TRUST **b), \
       comp)))
 
 #define sk_X509_TRUST_new_null() ((STACK_OF(X509_TRUST) *)sk_new_null())
@@ -3538,12 +3656,14 @@
 #define sk_X509_TRUST_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(X509_TRUST) *, sk))
 
-#define sk_X509_TRUST_set_cmp_func(sk, comp)                             \
-  ((int (*)(const X509_TRUST **a, const X509_TRUST **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(X509_TRUST) *, sk),                \
-      CHECKED_CAST(stack_cmp_func,                                       \
-                   int (*)(const X509_TRUST **a, const X509_TRUST **b),  \
-                   comp)))
+#define sk_X509_TRUST_set_cmp_func(sk, comp)                          \
+  ((int(OPENSSL_CDECL *)(const X509_TRUST **a, const X509_TRUST **b)) \
+       sk_set_cmp_func(                                               \
+           CHECKED_CAST(_STACK *, STACK_OF(X509_TRUST) *, sk),        \
+           CHECKED_CAST(stack_cmp_func,                               \
+                        int(OPENSSL_CDECL *)(const X509_TRUST **a,    \
+                                             const X509_TRUST **b),   \
+                        comp)))
 
 #define sk_X509_TRUST_deep_copy(sk, copy_func, free_func)             \
   ((STACK_OF(X509_TRUST) *)sk_deep_copy(                              \
@@ -3553,11 +3673,12 @@
       CHECKED_CAST(void (*)(void *), void (*)(X509_TRUST *), free_func)))
 
 /* X509_VERIFY_PARAM */
-#define sk_X509_VERIFY_PARAM_new(comp)                                   \
-  ((STACK_OF(X509_VERIFY_PARAM) *)sk_new(CHECKED_CAST(                   \
-      stack_cmp_func,                                                    \
-      int (*)(const X509_VERIFY_PARAM **a, const X509_VERIFY_PARAM **b), \
-      comp)))
+#define sk_X509_VERIFY_PARAM_new(comp)                                \
+  ((STACK_OF(X509_VERIFY_PARAM) *)sk_new(                             \
+      CHECKED_CAST(stack_cmp_func,                                    \
+                   int(OPENSSL_CDECL *)(const X509_VERIFY_PARAM **a,  \
+                                        const X509_VERIFY_PARAM **b), \
+                   comp)))
 
 #define sk_X509_VERIFY_PARAM_new_null() \
   ((STACK_OF(X509_VERIFY_PARAM) *)sk_new_null())
@@ -3626,12 +3747,14 @@
   sk_is_sorted(                            \
       CHECKED_CAST(const _STACK *, const STACK_OF(X509_VERIFY_PARAM) *, sk))
 
-#define sk_X509_VERIFY_PARAM_set_cmp_func(sk, comp)                           \
-  ((int (*)(const X509_VERIFY_PARAM **a, const X509_VERIFY_PARAM **b))        \
-       sk_set_cmp_func(                                                       \
-           CHECKED_CAST(_STACK *, STACK_OF(X509_VERIFY_PARAM) *, sk),         \
-           CHECKED_CAST(stack_cmp_func, int (*)(const X509_VERIFY_PARAM **a,  \
-                                                const X509_VERIFY_PARAM **b), \
+#define sk_X509_VERIFY_PARAM_set_cmp_func(sk, comp)                        \
+  ((int(OPENSSL_CDECL *)(const X509_VERIFY_PARAM **a,                      \
+                         const X509_VERIFY_PARAM **b))                     \
+       sk_set_cmp_func(                                                    \
+           CHECKED_CAST(_STACK *, STACK_OF(X509_VERIFY_PARAM) *, sk),      \
+           CHECKED_CAST(stack_cmp_func,                                    \
+                        int(OPENSSL_CDECL *)(const X509_VERIFY_PARAM **a,  \
+                                             const X509_VERIFY_PARAM **b), \
                         comp)))
 
 #define sk_X509_VERIFY_PARAM_deep_copy(sk, copy_func, free_func)             \
@@ -3643,9 +3766,10 @@
                    free_func)))
 
 /* void */
-#define sk_void_new(comp)                 \
-  ((STACK_OF(void) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func, int (*)(const void **a, const void **b), comp)))
+#define sk_void_new(comp)                                                   \
+  ((STACK_OF(void) *)sk_new(CHECKED_CAST(                                   \
+      stack_cmp_func, int(OPENSSL_CDECL *)(const void **a, const void **b), \
+      comp)))
 
 #define sk_void_new_null() ((STACK_OF(void) *)sk_new_null())
 
@@ -3702,10 +3826,11 @@
 #define sk_void_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(void) *, sk))
 
-#define sk_void_set_cmp_func(sk, comp)                                      \
-  ((int (*)(const void **a, const void **b))sk_set_cmp_func(                \
-      CHECKED_CAST(_STACK *, STACK_OF(void) *, sk),                         \
-      CHECKED_CAST(stack_cmp_func, int (*)(const void **a, const void **b), \
+#define sk_void_set_cmp_func(sk, comp)                                    \
+  ((int(OPENSSL_CDECL *)(const void **a, const void **b))sk_set_cmp_func( \
+      CHECKED_CAST(_STACK *, STACK_OF(void) *, sk),                       \
+      CHECKED_CAST(stack_cmp_func,                                        \
+                   int(OPENSSL_CDECL *)(const void **a, const void **b),  \
                    comp)))
 
 #define sk_void_deep_copy(sk, copy_func, free_func)                  \
@@ -3715,10 +3840,11 @@
       CHECKED_CAST(void (*)(void *), void (*)(void *), free_func)))
 
 /* SRTP_PROTECTION_PROFILE */
-#define sk_SRTP_PROTECTION_PROFILE_new(comp)                            \
-  ((STACK_OF(SRTP_PROTECTION_PROFILE) *)sk_new(CHECKED_CAST(            \
-      stack_cmp_func, int (*)(const const SRTP_PROTECTION_PROFILE **a,  \
-                              const const SRTP_PROTECTION_PROFILE **b), \
+#define sk_SRTP_PROTECTION_PROFILE_new(comp)                         \
+  ((STACK_OF(SRTP_PROTECTION_PROFILE) *)sk_new(CHECKED_CAST(         \
+      stack_cmp_func,                                                \
+      int(OPENSSL_CDECL *)(const const SRTP_PROTECTION_PROFILE **a,  \
+                           const const SRTP_PROTECTION_PROFILE **b), \
       comp)))
 
 #define sk_SRTP_PROTECTION_PROFILE_new_null() \
@@ -3794,14 +3920,15 @@
                             const STACK_OF(SRTP_PROTECTION_PROFILE) *, sk))
 
 #define sk_SRTP_PROTECTION_PROFILE_set_cmp_func(sk, comp)                   \
-  ((int (*)(const SRTP_PROTECTION_PROFILE **a,                              \
-            const SRTP_PROTECTION_PROFILE **b))                             \
+  ((int(OPENSSL_CDECL *)(const SRTP_PROTECTION_PROFILE **a,                 \
+                         const SRTP_PROTECTION_PROFILE **b))                \
        sk_set_cmp_func(                                                     \
            CHECKED_CAST(_STACK *, STACK_OF(SRTP_PROTECTION_PROFILE) *, sk), \
-           CHECKED_CAST(stack_cmp_func,                                     \
-                        int (*)(const SRTP_PROTECTION_PROFILE **a,          \
-                                const SRTP_PROTECTION_PROFILE **b),         \
-                        comp)))
+           CHECKED_CAST(                                                    \
+               stack_cmp_func,                                              \
+               int(OPENSSL_CDECL *)(const SRTP_PROTECTION_PROFILE **a,      \
+                                    const SRTP_PROTECTION_PROFILE **b),     \
+               comp)))
 
 #define sk_SRTP_PROTECTION_PROFILE_deep_copy(sk, copy_func, free_func)         \
   ((STACK_OF(SRTP_PROTECTION_PROFILE) *)sk_deep_copy(                          \
@@ -3815,10 +3942,12 @@
                    void (*)(const SRTP_PROTECTION_PROFILE *), free_func)))
 
 /* SSL_CIPHER */
-#define sk_SSL_CIPHER_new(comp)                 \
-  ((STACK_OF(SSL_CIPHER) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func,                           \
-      int (*)(const const SSL_CIPHER **a, const const SSL_CIPHER **b), comp)))
+#define sk_SSL_CIPHER_new(comp)                                      \
+  ((STACK_OF(SSL_CIPHER) *)sk_new(                                   \
+      CHECKED_CAST(stack_cmp_func,                                   \
+                   int(OPENSSL_CDECL *)(const const SSL_CIPHER **a,  \
+                                        const const SSL_CIPHER **b), \
+                   comp)))
 
 #define sk_SSL_CIPHER_new_null() ((STACK_OF(SSL_CIPHER) *)sk_new_null())
 
@@ -3884,12 +4013,14 @@
 #define sk_SSL_CIPHER_is_sorted(sk) \
   sk_is_sorted(CHECKED_CAST(const _STACK *, const STACK_OF(SSL_CIPHER) *, sk))
 
-#define sk_SSL_CIPHER_set_cmp_func(sk, comp)                             \
-  ((int (*)(const SSL_CIPHER **a, const SSL_CIPHER **b))sk_set_cmp_func( \
-      CHECKED_CAST(_STACK *, STACK_OF(SSL_CIPHER) *, sk),                \
-      CHECKED_CAST(stack_cmp_func,                                       \
-                   int (*)(const SSL_CIPHER **a, const SSL_CIPHER **b),  \
-                   comp)))
+#define sk_SSL_CIPHER_set_cmp_func(sk, comp)                          \
+  ((int(OPENSSL_CDECL *)(const SSL_CIPHER **a, const SSL_CIPHER **b)) \
+       sk_set_cmp_func(                                               \
+           CHECKED_CAST(_STACK *, STACK_OF(SSL_CIPHER) *, sk),        \
+           CHECKED_CAST(stack_cmp_func,                               \
+                        int(OPENSSL_CDECL *)(const SSL_CIPHER **a,    \
+                                             const SSL_CIPHER **b),   \
+                        comp)))
 
 #define sk_SSL_CIPHER_deep_copy(sk, copy_func, free_func)                 \
   ((STACK_OF(SSL_CIPHER) *)sk_deep_copy(                                  \
@@ -3900,10 +4031,11 @@
                    free_func)))
 
 /* OPENSSL_STRING */
-#define sk_OPENSSL_STRING_new(comp)                 \
-  ((STACK_OF(OPENSSL_STRING) *)sk_new(CHECKED_CAST( \
-      stack_cmp_func,                               \
-      int (*)(const OPENSSL_STRING *a, const OPENSSL_STRING *b), comp)))
+#define sk_OPENSSL_STRING_new(comp)                                           \
+  ((STACK_OF(OPENSSL_STRING) *)sk_new(CHECKED_CAST(                           \
+      stack_cmp_func,                                                         \
+      int(OPENSSL_CDECL *)(const OPENSSL_STRING *a, const OPENSSL_STRING *b), \
+      comp)))
 
 #define sk_OPENSSL_STRING_new_null() ((STACK_OF(OPENSSL_STRING) *)sk_new_null())
 
@@ -3971,12 +4103,13 @@
   sk_is_sorted(                         \
       CHECKED_CAST(const _STACK *, const STACK_OF(OPENSSL_STRING) *, sk))
 
-#define sk_OPENSSL_STRING_set_cmp_func(sk, comp)                           \
-  ((int (*)(const OPENSSL_STRING **a, const OPENSSL_STRING **b))           \
-       sk_set_cmp_func(                                                    \
-           CHECKED_CAST(_STACK *, STACK_OF(OPENSSL_STRING) *, sk),         \
-           CHECKED_CAST(stack_cmp_func, int (*)(const OPENSSL_STRING **a,  \
-                                                const OPENSSL_STRING **b), \
+#define sk_OPENSSL_STRING_set_cmp_func(sk, comp)                              \
+  ((int(OPENSSL_CDECL *)(const OPENSSL_STRING **a, const OPENSSL_STRING **b)) \
+       sk_set_cmp_func(                                                       \
+           CHECKED_CAST(_STACK *, STACK_OF(OPENSSL_STRING) *, sk),            \
+           CHECKED_CAST(stack_cmp_func,                                       \
+                        int(OPENSSL_CDECL *)(const OPENSSL_STRING **a,        \
+                                             const OPENSSL_STRING **b),       \
                         comp)))
 
 #define sk_OPENSSL_STRING_deep_copy(sk, copy_func, free_func)             \

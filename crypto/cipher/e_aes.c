@@ -138,9 +138,9 @@ static int hwaes_capable(void) {
 #if defined(BSAES)
 /* On platforms where BSAES gets defined (just above), then these functions are
  * provided by asm. */
-void bsaes_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t length,
+void OPENSSL_CDECL bsaes_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t length,
                        const AES_KEY *key, uint8_t ivec[16], int enc);
-void bsaes_ctr32_encrypt_blocks(const uint8_t *in, uint8_t *out, size_t len,
+void OPENSSL_CDECL bsaes_ctr32_encrypt_blocks(const uint8_t *in, uint8_t *out, size_t len,
                                 const AES_KEY *key, const uint8_t ivec[16]);
 #else
 static char bsaes_capable(void) {
@@ -149,12 +149,12 @@ static char bsaes_capable(void) {
 
 /* On other platforms, bsaes_capable() will always return false and so the
  * following will never be called. */
-static void bsaes_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t length,
+static void OPENSSL_CDECL bsaes_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t length,
                               const AES_KEY *key, uint8_t ivec[16], int enc) {
   abort();
 }
 
-static void bsaes_ctr32_encrypt_blocks(const uint8_t *in, uint8_t *out,
+static void OPENSSL_CDECL bsaes_ctr32_encrypt_blocks(const uint8_t *in, uint8_t *out,
                                        size_t len, const AES_KEY *key,
                                        const uint8_t ivec[16]) {
   abort();
@@ -200,15 +200,15 @@ static void OPENSSL_CDECL vpaes_cbc_encrypt(const uint8_t *in, uint8_t *out, siz
 #endif
 
 #if defined(HWAES)
-int aes_hw_set_encrypt_key(const uint8_t *user_key, const int bits,
+int OPENSSL_CDECL aes_hw_set_encrypt_key(const uint8_t *user_key, const int bits,
                            AES_KEY *key);
-int aes_hw_set_decrypt_key(const uint8_t *user_key, const int bits,
+int OPENSSL_CDECL aes_hw_set_decrypt_key(const uint8_t *user_key, const int bits,
                            AES_KEY *key);
-void aes_hw_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
-void aes_hw_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
-void aes_hw_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t length,
+void OPENSSL_CDECL aes_hw_encrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+void OPENSSL_CDECL aes_hw_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+void OPENSSL_CDECL aes_hw_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t length,
                         const AES_KEY *key, uint8_t *ivec, const int enc);
-void aes_hw_ctr32_encrypt_blocks(const uint8_t *in, uint8_t *out, size_t len,
+void OPENSSL_CDECL aes_hw_ctr32_encrypt_blocks(const uint8_t *in, uint8_t *out, size_t len,
                                  const AES_KEY *key, const uint8_t ivec[16]);
 #else
 /* If HWAES isn't defined then we provide dummy functions for each of the hwaes
@@ -217,32 +217,32 @@ static int hwaes_capable(void) {
   return 0;
 }
 
-static int aes_hw_set_encrypt_key(const uint8_t *user_key, int bits,
+static int OPENSSL_CDECL aes_hw_set_encrypt_key(const uint8_t *user_key, int bits,
                                   AES_KEY *key) {
   abort();
 }
 
-static int aes_hw_set_decrypt_key(const uint8_t *user_key, int bits,
+static int OPENSSL_CDECL aes_hw_set_decrypt_key(const uint8_t *user_key, int bits,
                                   AES_KEY *key) {
   abort();
 }
 
-static void aes_hw_encrypt(const uint8_t *in, uint8_t *out,
+static void OPENSSL_CDECL aes_hw_encrypt(const uint8_t *in, uint8_t *out,
                            const AES_KEY *key) {
   abort();
 }
 
-static void aes_hw_decrypt(const uint8_t *in, uint8_t *out,
+static void OPENSSL_CDECL aes_hw_decrypt(const uint8_t *in, uint8_t *out,
                            const AES_KEY *key) {
   abort();
 }
 
-static void aes_hw_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t length,
+static void OPENSSL_CDECL aes_hw_cbc_encrypt(const uint8_t *in, uint8_t *out, size_t length,
                                const AES_KEY *key, uint8_t *ivec, int enc) {
   abort();
 }
 
-static void aes_hw_ctr32_encrypt_blocks(const uint8_t *in, uint8_t *out,
+static void OPENSSL_CDECL aes_hw_ctr32_encrypt_blocks(const uint8_t *in, uint8_t *out,
                                         size_t len, const AES_KEY *key,
                                         const uint8_t ivec[16]) {
   abort();

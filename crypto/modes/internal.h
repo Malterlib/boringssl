@@ -122,7 +122,7 @@ static inline void PUTU32_aligned(void *in, uint32_t v) {
 }
 
 /* block128_f is the type of a 128-bit, block cipher. */
-typedef void (*block128_f)(const uint8_t in[16], uint8_t out[16],
+typedef void (OPENSSL_CDECL *block128_f)(const uint8_t in[16], uint8_t out[16],
                            const void *key);
 
 /* GCM definitions */
@@ -171,7 +171,7 @@ int crypto_gcm_clmul_enabled(void);
 /* CTR. */
 
 /* ctr128_f is the type of a function that performs CTR-mode encryption. */
-typedef void (*ctr128_f)(const uint8_t *in, uint8_t *out, size_t blocks,
+typedef void (OPENSSL_CDECL *ctr128_f)(const uint8_t *in, uint8_t *out, size_t blocks,
                          const void *key, const uint8_t ivec[16]);
 
 /* CRYPTO_ctr128_encrypt encrypts (or decrypts, it's the same in CTR mode)
@@ -281,7 +281,7 @@ OPENSSL_EXPORT void CRYPTO_gcm128_tag(GCM128_CONTEXT *ctx, uint8_t *tag,
 /* CBC. */
 
 /* cbc128_f is the type of a function that performs CBC-mode encryption. */
-typedef void (*cbc128_f)(const uint8_t *in, uint8_t *out, size_t len,
+typedef void (OPENSSL_CDECL *cbc128_f)(const uint8_t *in, uint8_t *out, size_t len,
                          const void *key, uint8_t ivec[16], int enc);
 
 /* CRYPTO_cbc128_encrypt encrypts |len| bytes from |in| to |out| using the

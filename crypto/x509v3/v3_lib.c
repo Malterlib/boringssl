@@ -71,7 +71,7 @@ static STACK_OF(X509V3_EXT_METHOD) *ext_list = NULL;
 
 static void ext_list_free(X509V3_EXT_METHOD *ext);
 
-static int ext_stack_cmp(const X509V3_EXT_METHOD **a,
+static int OPENSSL_CDECL ext_stack_cmp(const X509V3_EXT_METHOD **a,
                          const X509V3_EXT_METHOD **b)
 {
     return ((*a)->ext_nid - (*b)->ext_nid);

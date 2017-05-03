@@ -30,7 +30,7 @@ output_stack () {
   cat >> "${include_dir}/stack_macros.h" << EOF
 /* ${type} */
 #define sk_${type}_new(comp)\\
-  ((STACK_OF(${type})*) sk_new(CHECKED_CAST(stack_cmp_func, int (*) (const ${ptrtype} *a, const ${ptrtype} *b), comp)))
+  ((STACK_OF(${type})*) sk_new(CHECKED_CAST(stack_cmp_func, int (OPENSSL_CDECL *) (const ${ptrtype} *a, const ${ptrtype} *b), comp)))
 
 #define sk_${type}_new_null()\\
   ((STACK_OF(${type})*) sk_new_null())
@@ -84,7 +84,7 @@ output_stack () {
   sk_is_sorted(CHECKED_CAST(const _STACK*, const STACK_OF(${type})*, sk))
 
 #define sk_${type}_set_cmp_func(sk, comp)\\
-  ((int (*) (const ${type} **a, const ${type} **b)) sk_set_cmp_func(CHECKED_CAST(_STACK*, STACK_OF(${type})*, sk), CHECKED_CAST(stack_cmp_func, int (*) (const ${type} **a, const ${type} **b), comp)))
+  ((int (OPENSSL_CDECL *) (const ${type} **a, const ${type} **b)) sk_set_cmp_func(CHECKED_CAST(_STACK*, STACK_OF(${type})*, sk), CHECKED_CAST(stack_cmp_func, int (OPENSSL_CDECL *) (const ${type} **a, const ${type} **b), comp)))
 
 #define sk_${type}_deep_copy(sk, copy_func, free_func)\\
 ((STACK_OF(${type})*) sk_deep_copy(CHECKED_CAST(const _STACK*, const STACK_OF(${type})*, sk), CHECKED_CAST(void* (*) (void*), ${ptrtype} (*) (${ptrtype}), copy_func), CHECKED_CAST(void (*) (void*), void (*) (${ptrtype}), free_func)))
