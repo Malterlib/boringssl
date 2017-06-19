@@ -42,6 +42,9 @@ void CRYPTO_once(CRYPTO_once_t *once, void (OPENSSL_CDECL * init)(void)) {
   }
 }
 
+void CRYPTO_add_cleanup(void (OPENSSL_CDECL *cleanup)(void *), void *context) {
+}
+
 void CRYPTO_MUTEX_init(CRYPTO_MUTEX *lock) {
   InitializeSRWLock((SRWLOCK *) lock);
 }

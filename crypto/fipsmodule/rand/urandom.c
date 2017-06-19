@@ -95,6 +95,14 @@ DEFINE_BSS_GET(int, urandom_fd);
 
 DEFINE_STATIC_ONCE(rand_once);
 
+static void  OPENSSL_CDECL cleanup_urandom(void *context) {
+  int *urandom_fd = urandom_fd_bss_get();
+  if (*urandom_fd != kUnset && *urandom_fd != kHaveGetrandom) {
+    close(*urandom_fd);
+    *urandom_fd = kUnset;
+  }
+}
+
 #if defined(USE_SYS_getrandom) || defined(BORINGSSL_FIPS)
 /* message writes |msg| to stderr. We use this because referencing |stderr|
  * with |fprintf| generates relocations, which is a problem inside the FIPS
@@ -201,6 +209,7 @@ static void  OPENSSL_CDECL init_once(void) {
     }
   }
   *urandom_fd_bss_get() = fd;
+  CRYPTO_add_cleanup(&cleanup_urandom, NULL);
 }
 
 void RAND_set_urandom_fd(int fd) {
