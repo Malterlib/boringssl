@@ -279,6 +279,8 @@ DEFINE_METHOD_FUNCTION(struct built_in_curves, OPENSSL_built_in_curves) {
 #endif
 }
 
+static void OPENSSL_CDECL built_in_curve_scalar_field_monts_cleanup(void *context);
+
 // built_in_curve_scalar_field_monts contains Montgomery contexts for
 // performing inversions in the scalar fields of each of the built-in
 // curves. It's protected by |built_in_curve_scalar_field_monts_once|.
@@ -322,6 +324,7 @@ DEFINE_LOCAL_DATA(BN_MONT_CTX **, built_in_curve_scalar_field_monts) {
   }
 
   *out = monts;
+  CRYPTO_add_cleanup(&built_in_curve_scalar_field_monts_cleanup, NULL);
   goto done;
 
 err:
@@ -334,6 +337,16 @@ err:
 done:
   BN_free(order);
   BN_CTX_free(bn_ctx);
+}
+
+static void OPENSSL_CDECL built_in_curve_scalar_field_monts_cleanup(void *context) {
+  BN_MONT_CTX ***storage = built_in_curve_scalar_field_monts_storage_bss_get();
+	
+  for (unsigned i = 0; i < OPENSSL_NUM_BUILT_IN_CURVES; i++) {
+    BN_MONT_CTX_free((*storage)[i]);
+  }
+  OPENSSL_free(*storage);
+  *storage = NULL;
 }
 
 EC_GROUP *ec_group_new(const EC_METHOD *meth) {
