@@ -128,6 +128,21 @@ struct crypto_ex_data_func_st {
   CRYPTO_EX_free *free_func;
 };
 
+static void CRYPTO_cleanup_ex_data(void *context) {
+  CRYPTO_EX_DATA_CLASS *ex_data_class = (CRYPTO_EX_DATA_CLASS *)context;
+
+  for (size_t i = 0; 
+       i < sk_CRYPTO_EX_DATA_FUNCS_num(ex_data_class->meth); 
+       i++) {
+    CRYPTO_EX_DATA_FUNCS *func_pointer =
+        sk_CRYPTO_EX_DATA_FUNCS_value(ex_data_class->meth, i);
+    OPENSSL_free(func_pointer);
+  }
+  
+  sk_CRYPTO_EX_DATA_FUNCS_free(ex_data_class->meth);
+  ex_data_class->meth = NULL;
+}
+
 int CRYPTO_get_ex_new_index(CRYPTO_EX_DATA_CLASS *ex_data_class, int *out_index,
                             long argl, void *argp, CRYPTO_EX_free *free_func) {
   CRYPTO_EX_DATA_FUNCS *funcs;
@@ -147,6 +162,8 @@ int CRYPTO_get_ex_new_index(CRYPTO_EX_DATA_CLASS *ex_data_class, int *out_index,
 
   if (ex_data_class->meth == NULL) {
     ex_data_class->meth = sk_CRYPTO_EX_DATA_FUNCS_new_null();
+    if (ex_data_class->meth)
+      CRYPTO_add_cleanup(&CRYPTO_cleanup_ex_data, ex_data_class);
   }
 
   if (ex_data_class->meth == NULL ||
