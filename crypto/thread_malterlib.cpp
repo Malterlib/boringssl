@@ -59,8 +59,20 @@ namespace {
       m_Lock.f_Unlock();
     }
     
+    ~CSubSystem_BoringSSL() {
+      for (auto &Cleanup : m_CleanupFunctions) {
+        Cleanup.m_fCleanup(Cleanup.m_pContext);
+      }
+    }
+    
+    struct CCleanupEntry {
+      void (*m_fCleanup)(void *);
+      void *m_pContext;
+    };
+    
     CMutual m_Lock;
     DLinkDS_List(CMalterlibLock, m_Link) m_Mutexes;
+    TCVector<CCleanupEntry> m_CleanupFunctions;
   };
   
   TCSubSystem<CSubSystem_BoringSSL, ESubSystemDestruction_BeforeMemoryManager> 
@@ -98,6 +110,14 @@ void CRYPTO_once(CRYPTO_once_t *once, void (*init)(void)) {
     init();
     pInit->m_bInited = true;
   }
+}
+
+void CRYPTO_add_cleanup(void (*cleanup)(void *), void *context) {
+  auto &SubSystem = *g_SubSystem_BoringSSL;
+  DLock(SubSystem.m_Lock);
+  auto &Cleanup = SubSystem.m_CleanupFunctions.f_Insert();
+  Cleanup.m_fCleanup = cleanup;
+  Cleanup.m_pContext = context;
 }
 
 void CRYPTO_MUTEX_init(CRYPTO_MUTEX *lock) {
