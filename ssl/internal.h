@@ -51,6 +51,7 @@
 
 #if defined(OPENSSL_WINDOWS)
 // Windows defines struct timeval in winsock2.h.
+OPENSSL_MSVC_PRAGMA(warning(disable:4291))
 #include <winsock2.h>
 #else
 #include <sys/time.h>
