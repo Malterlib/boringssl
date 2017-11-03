@@ -113,12 +113,12 @@ static bool ssl_write_client_cipher_list(const SSL_HANDSHAKE *hs, CBB *out,
   if (hs->max_version >= TLS1_3_VERSION) {
     static const uint16_t kCiphersNoAESHardware[] = {
         SSL_CIPHER_CHACHA20_POLY1305_SHA256,
-        SSL_CIPHER_AES_128_GCM_SHA256,
         SSL_CIPHER_AES_256_GCM_SHA384,
+        SSL_CIPHER_AES_128_GCM_SHA256,
     };
     static const uint16_t kCiphersAESHardware[] = {
-        SSL_CIPHER_AES_128_GCM_SHA256,
         SSL_CIPHER_AES_256_GCM_SHA384,
+        SSL_CIPHER_AES_128_GCM_SHA256,
         SSL_CIPHER_CHACHA20_POLY1305_SHA256,
     };
     static const uint16_t kCiphersCNSA[] = {
