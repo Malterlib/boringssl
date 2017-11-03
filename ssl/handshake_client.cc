@@ -239,8 +239,8 @@ static bool ssl_write_client_cipher_list(const SSL_HANDSHAKE *hs, CBB *out,
         !CBB_add_u16(&child, TLS1_CK_CHACHA20_POLY1305_SHA256 & 0xffff)) {
       return false;
     }
-    if (!CBB_add_u16(&child, TLS1_CK_AES_128_GCM_SHA256 & 0xffff) ||
-        !CBB_add_u16(&child, TLS1_CK_AES_256_GCM_SHA384 & 0xffff)) {
+    if (!CBB_add_u16(&child, TLS1_CK_AES_256_GCM_SHA384 & 0xffff) ||
+        !CBB_add_u16(&child, TLS1_CK_AES_128_GCM_SHA256 & 0xffff)) {
       return false;
     }
     if (EVP_has_aes_hardware() &&
