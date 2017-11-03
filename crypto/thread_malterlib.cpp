@@ -33,10 +33,25 @@ namespace {
 
   struct CSubSystem_BoringSSL : public CSubSystem {
     void f_PrepareFork() override {
-      m_Lock.f_Lock();
+      while (true)
+      {
+        m_Lock.f_Lock();
+        bool bAborted = false;
+        for (auto iMutex = m_Mutexes.f_GetIterator(); iMutex; ++iMutex) {
+          if (!iMutex->f_TryLock()) {
+            --iMutex;
+            bAborted = true;
+            for (; iMutex; --iMutex)
+              iMutex->f_Unlock();
+            m_Lock.f_Unlock();
+            break;
+          }
+        }
+        if (!bAborted)
+          break;
+      }
       m_Lock.f_PrepareFork();
       for (auto &Mutex : m_Mutexes) {
-        Mutex.f_Lock();
         Mutex.f_PrepareFork();
       }
     }
