@@ -132,7 +132,7 @@ static const SSL_CIPHER *choose_tls13_cipher(
 
     // TLS 1.3 removes legacy ciphers, so honor the client order, but prefer
     // ChaCha20 if we do not have AES hardware.
-    if (aes_is_fine) {
+    if (aes_is_fine && candidate->algorithm_enc == SSL_AES256GCM) {
       return candidate;
     }
 
