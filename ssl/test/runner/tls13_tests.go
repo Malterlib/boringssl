@@ -2366,7 +2366,8 @@ func addTLS13CipherPreferenceTests() {
 	})
 
 	// Test that the client orders ChaCha20-Poly1305 and AES-GCM based on
-	// whether it has AES hardware.
+	// whether it has AES hardware. With AES hardware, the default order puts
+	// AES-256-GCM first.
 	testCases = append(testCases, testCase{
 		name: "TLS13-CipherPreference-Client",
 		config: Config{
@@ -2376,7 +2377,7 @@ func addTLS13CipherPreferenceTests() {
 			PreferServerCipherSuites: false,
 		},
 		flags: []string{
-			"-expect-cipher-aes", strconv.Itoa(int(TLS_AES_128_GCM_SHA256)),
+			"-expect-cipher-aes", strconv.Itoa(int(TLS_AES_256_GCM_SHA384)),
 			"-expect-cipher-no-aes", strconv.Itoa(int(TLS_CHACHA20_POLY1305_SHA256)),
 		},
 	})
