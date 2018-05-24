@@ -482,6 +482,20 @@ struct built_in_groups_st {
 DEFINE_BSS_GET(struct built_in_groups_st, built_in_groups);
 DEFINE_STATIC_MUTEX(built_in_groups_lock);
 
+static void EC_GROUP_new_by_curve_name_cleanup(void) __attribute__((destructor));
+static void EC_GROUP_new_by_curve_name_cleanup(void) {
+  struct built_in_groups_st *groups = built_in_groups_bss_get();
+  CRYPTO_STATIC_MUTEX_lock_write(built_in_groups_lock_bss_get());
+  for (size_t i = 0; i < OPENSSL_NUM_BUILT_IN_CURVES; i++) {
+    if (groups->groups[i]) {
+      groups->groups[i]->curve_name = NID_undef;
+      EC_GROUP_free(groups->groups[i]);
+      groups->groups[i] = NULL;
+    }
+  }
+  CRYPTO_STATIC_MUTEX_unlock_write(built_in_groups_lock_bss_get());
+}
+
 EC_GROUP *EC_GROUP_new_by_curve_name(int nid) {
   struct built_in_groups_st *groups = built_in_groups_bss_get();
   EC_GROUP **group_ptr = NULL;
