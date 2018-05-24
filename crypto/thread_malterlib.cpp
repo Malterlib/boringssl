@@ -73,11 +73,19 @@ namespace {
       m_Lock.f_ForkedChild();
       m_Lock.f_Unlock();
     }
-    
-    ~CSubSystem_BoringSSL() {
+
+    void f_DestroyAggregates(bool _bDestroySystem) override {
+      if (!_bDestroySystem)
+        return;
+
       for (auto &Cleanup : m_CleanupFunctions) {
         Cleanup.m_fCleanup(Cleanup.m_pContext);
       }
+      m_CleanupFunctions.f_Clear();
+    }
+    
+    ~CSubSystem_BoringSSL() {
+      DMibRequire(m_CleanupFunctions.f_IsEmpty());
     }
     
     struct CCleanupEntry {
