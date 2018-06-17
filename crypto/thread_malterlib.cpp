@@ -75,9 +75,6 @@ namespace {
     }
 
     void f_DestroyAggregates(bool _bDestroySystem) override {
-      if (!_bDestroySystem)
-        return;
-
       for (auto &Cleanup : m_CleanupFunctions) {
         Cleanup.m_fCleanup(Cleanup.m_pContext);
       }
