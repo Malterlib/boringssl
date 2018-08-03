@@ -52,7 +52,7 @@ TEST(ScryptTest, TestVectors) {
     }
 
     std::vector<uint8_t> result(key.size());
-    ASSERT_TRUE(EVP_PBE_scrypt(reinterpret_cast<const char *>(password.data()),
+    ASSERT_TRUE(EVP_PBE_scrypt_SHA256(reinterpret_cast<const char *>(password.data()),
                                password.size(), salt.data(), salt.size(), N, r,
                                p, max_mem, result.data(), result.size()));
     EXPECT_EQ(Bytes(key), Bytes(result));
@@ -65,7 +65,7 @@ TEST(ScryptTest, MemoryLimit) {
 
   // This test requires more than 1GB to run.
   uint8_t key[64];
-  EXPECT_FALSE(EVP_PBE_scrypt(kPassword, strlen(kPassword),
+  EXPECT_FALSE(EVP_PBE_scrypt_SHA256(kPassword, strlen(kPassword),
                               reinterpret_cast<const uint8_t *>(kSalt),
                               strlen(kSalt), 1048576 /* N */, 8 /* r */,
                               1 /* p */, 0 /* max_mem */, key, sizeof(key)));
@@ -78,26 +78,26 @@ TEST(ScryptTest, InvalidParameters) {
   uint8_t key[64];
 
   // p and r are non-zero.
-  EXPECT_FALSE(EVP_PBE_scrypt(nullptr, 0, nullptr, 0, 1024 /* N */, 0 /* r */,
+  EXPECT_FALSE(EVP_PBE_scrypt_SHA256(nullptr, 0, nullptr, 0, 1024 /* N */, 0 /* r */,
                               1 /* p */, 0 /* max_mem */, key, sizeof(key)));
-  EXPECT_FALSE(EVP_PBE_scrypt(nullptr, 0, nullptr, 0, 1024 /* N */, 8 /* r */,
+  EXPECT_FALSE(EVP_PBE_scrypt_SHA256(nullptr, 0, nullptr, 0, 1024 /* N */, 8 /* r */,
                               0 /* p */, 0 /* max_mem */, key, sizeof(key)));
 
   // N must be a power of 2 > 1.
-  EXPECT_FALSE(EVP_PBE_scrypt(nullptr, 0, nullptr, 0, 0 /* N */, 8 /* r */,
+  EXPECT_FALSE(EVP_PBE_scrypt_SHA256(nullptr, 0, nullptr, 0, 0 /* N */, 8 /* r */,
                               1 /* p */, 0 /* max_mem */, key, sizeof(key)));
-  EXPECT_FALSE(EVP_PBE_scrypt(nullptr, 0, nullptr, 0, 1 /* N */, 8 /* r */,
+  EXPECT_FALSE(EVP_PBE_scrypt_SHA256(nullptr, 0, nullptr, 0, 1 /* N */, 8 /* r */,
                               1 /* p */, 0 /* max_mem */, key, sizeof(key)));
-  EXPECT_FALSE(EVP_PBE_scrypt(nullptr, 0, nullptr, 0, 1023 /* N */, 8 /* r */,
+  EXPECT_FALSE(EVP_PBE_scrypt_SHA256(nullptr, 0, nullptr, 0, 1023 /* N */, 8 /* r */,
                               1 /* p */, 0 /* max_mem */, key, sizeof(key)));
-  EXPECT_TRUE(EVP_PBE_scrypt(nullptr, 0, nullptr, 0, 1024 /* N */, 8 /* r */,
+  EXPECT_TRUE(EVP_PBE_scrypt_SHA256(nullptr, 0, nullptr, 0, 1024 /* N */, 8 /* r */,
                               1 /* p */, 0 /* max_mem */, key, sizeof(key)));
-  EXPECT_FALSE(EVP_PBE_scrypt(nullptr, 0, nullptr, 0, 1025 /* N */, 8 /* r */,
+  EXPECT_FALSE(EVP_PBE_scrypt_SHA256(nullptr, 0, nullptr, 0, 1025 /* N */, 8 /* r */,
                               1 /* p */, 0 /* max_mem */, key, sizeof(key)));
 
   // N must be below 2^(128 * r / 8).
-  EXPECT_FALSE(EVP_PBE_scrypt(nullptr, 0, nullptr, 0, 65536 /* N */, 1 /* r */,
+  EXPECT_FALSE(EVP_PBE_scrypt_SHA256(nullptr, 0, nullptr, 0, 65536 /* N */, 1 /* r */,
                               1 /* p */, 0 /* max_mem */, key, sizeof(key)));
-  EXPECT_TRUE(EVP_PBE_scrypt(nullptr, 0, nullptr, 0, 32768 /* N */, 1 /* r */,
+  EXPECT_TRUE(EVP_PBE_scrypt_SHA256(nullptr, 0, nullptr, 0, 32768 /* N */, 1 /* r */,
                              1 /* p */, 0 /* max_mem */, key, sizeof(key)));
 }

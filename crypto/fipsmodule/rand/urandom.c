@@ -137,10 +137,10 @@ static void maybe_set_extra_getrandom_flags(void) {
 DEFINE_STATIC_ONCE(rand_once)
 
 static void cleanup_urandom(void *context) {
-  int *urandom_fd = urandom_fd_bss_get();
-  if (*urandom_fd != kUnset && *urandom_fd != kHaveGetrandom) {
-    close(*urandom_fd);
-    *urandom_fd = kUnset;
+  int *urandom_fd_ptr = urandom_fd_bss_get();
+  if (*urandom_fd_ptr != kUnset && *urandom_fd_ptr != kHaveGetrandom) {
+    close(*urandom_fd_ptr);
+    *urandom_fd_ptr = kUnset;
   }
 }
 

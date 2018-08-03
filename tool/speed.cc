@@ -866,7 +866,7 @@ static bool SpeedScrypt(const std::string &selected) {
 
   if (!TimeFunction(&results, [&]() -> bool {
         uint8_t out[64];
-        return !!EVP_PBE_scrypt(kPassword, sizeof(kPassword) - 1, kSalt,
+        return !!EVP_PBE_scrypt_SHA256(kPassword, sizeof(kPassword) - 1, kSalt,
                                 sizeof(kSalt) - 1, 1024, 8, 16, 0 /* max_mem */,
                                 out, sizeof(out));
       })) {
@@ -877,7 +877,7 @@ static bool SpeedScrypt(const std::string &selected) {
 
   if (!TimeFunction(&results, [&]() -> bool {
         uint8_t out[64];
-        return !!EVP_PBE_scrypt(kPassword, sizeof(kPassword) - 1, kSalt,
+        return !!EVP_PBE_scrypt_SHA256(kPassword, sizeof(kPassword) - 1, kSalt,
                                 sizeof(kSalt) - 1, 16384, 8, 1, 0 /* max_mem */,
                                 out, sizeof(out));
       })) {
