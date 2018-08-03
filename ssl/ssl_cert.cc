@@ -119,6 +119,7 @@
 #include <string.h>
 
 #include <utility>
+#include <iostream>
 
 #include <openssl/bn.h>
 #include <openssl/buf.h>
