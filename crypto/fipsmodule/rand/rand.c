@@ -223,6 +223,18 @@ static void rand_state_clear_all(void) {
   // Both locks are deliberately left locked so that any threads that are still
   // running will hang if they try to call |RAND_bytes|.
 }
+#else
+static void CRYPTO_cleanup_rand_state(void *context) {
+  CRYPTO_STATIC_MUTEX_lock_write(rand_state_lock_bss_get());
+  struct rand_state *cur;
+  while ((cur = *rand_state_free_list_bss_get())) {
+	struct rand_state *to_free = cur;
+    *rand_state_free_list_bss_get() = cur->next;
+    CTR_DRBG_clear(&to_free->drbg);
+    OPENSSL_free(to_free);
+  }
+  CRYPTO_STATIC_MUTEX_unlock_write(rand_state_lock_bss_get());
+}
 #endif
 
 // rand_state_init seeds a |rand_state|.
@@ -263,6 +275,8 @@ static struct rand_state *rand_state_get(void) {
   state->next_all = *rand_state_all_list_bss_get();
   *rand_state_all_list_bss_get() = state;
   CRYPTO_STATIC_MUTEX_unlock_write(rand_state_lock_bss_get());
+#else
+  CRYPTO_add_cleanup(&CRYPTO_cleanup_rand_state, NULL);
 #endif
 
   return state;
