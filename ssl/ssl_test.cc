@@ -251,7 +251,7 @@ static const CipherTest kCipherTests[] = {
     {
         // To simplify things, banish all but {ECDHE_RSA,RSA} x
         // {CHACHA20,AES_256_CBC,AES_128_CBC} x SHA1.
-        "!AESGCM:!3DES:"
+        "!AESGCM:!3DES:!SHA256:!SHA384:"
         // Order some ciphers backwards by strength.
         "ALL:-CHACHA20:-AES256:-AES128:-ALL:"
         // Select ECDHE ones and sort them by strength. Ties should resolve
@@ -310,15 +310,15 @@ static const CipherTest kCipherTests[] = {
     },
     // SSLv3 matches everything that existed before TLS 1.2.
     {
-        "AES128-SHA:ECDHE-RSA-AES128-GCM-SHA256:!SSLv3",
+        "AES128-SHA:AES128-SHA256:!SSLv3",
         {
-            {TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256, 0},
+            {TLS1_CK_RSA_WITH_AES_128_SHA256, 0},
         },
         false,
     },
     // TLSv1.2 matches everything added in TLS 1.2.
     {
-        "AES128-SHA:ECDHE-RSA-AES128-GCM-SHA256:!TLSv1.2",
+        "AES128-SHA:AES128-SHA256:!TLSv1.2",
         {
             {TLS1_CK_RSA_WITH_AES_128_SHA, 0},
         },
@@ -327,21 +327,21 @@ static const CipherTest kCipherTests[] = {
     // The two directives have no intersection.  But each component is valid, so
     // even in strict mode it is accepted.
     {
-        "AES128-SHA:ECDHE-RSA-AES128-GCM-SHA256:!TLSv1.2+SSLv3",
+        "AES128-SHA:AES128-SHA256:!TLSv1.2+SSLv3",
         {
             {TLS1_CK_RSA_WITH_AES_128_SHA, 0},
-            {TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256, 0},
+            {TLS1_CK_RSA_WITH_AES_128_SHA256, 0},
         },
         false,
     },
     // Spaces, semi-colons and commas are separators.
     {
-        "AES128-SHA: ECDHE-RSA-AES128-GCM-SHA256 AES256-SHA ,ECDHE-ECDSA-AES128-GCM-SHA256 ; AES128-GCM-SHA256",
+        "AES128-SHA: AES128-SHA256 AES256-SHA ,AES256-SHA256 ; AES128-GCM-SHA256",
         {
             {TLS1_CK_RSA_WITH_AES_128_SHA, 0},
-            {TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256, 0},
+            {TLS1_CK_RSA_WITH_AES_128_SHA256, 0},
             {TLS1_CK_RSA_WITH_AES_256_SHA, 0},
-            {TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, 0},
+            {TLS1_CK_RSA_WITH_AES_256_SHA256, 0},
             {TLS1_CK_RSA_WITH_AES_128_GCM_SHA256, 0},
         },
         // …but not in strict mode.
@@ -867,22 +867,22 @@ TEST(SSLTest, CipherProperties) {
           NID_md5_sha1,
       },
       {
-          TLS1_CK_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-          "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",
+          TLS1_CK_ECDHE_RSA_WITH_AES_128_SHA256,
+          "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
           NID_aes_128_cbc,
-          NID_sha1,
+          NID_sha256,
           NID_kx_ecdhe,
           NID_auth_rsa,
-          NID_md5_sha1,
+          NID_sha256,
       },
       {
-          TLS1_CK_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-          "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+          TLS1_CK_ECDHE_RSA_WITH_AES_256_SHA384,
+          "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
           NID_aes_256_cbc,
-          NID_sha1,
+          NID_sha384,
           NID_kx_ecdhe,
           NID_auth_rsa,
-          NID_md5_sha1,
+          NID_sha384,
       },
       {
           TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
