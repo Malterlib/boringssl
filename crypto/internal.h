@@ -133,7 +133,7 @@
 #define OPENSSL_MALTERLIB_THREADS
 #endif
 
-#if defined(OPENSSL_THREADS) && !defined(OPENSSL_MALTERLIB_THREADS) \
+#if defined(OPENSSL_THREADS) && !defined(OPENSSL_MALTERLIB_THREADS) && \
     (!defined(OPENSSL_WINDOWS) || defined(__MINGW32__))
 #include <pthread.h>
 #define OPENSSL_PTHREADS
