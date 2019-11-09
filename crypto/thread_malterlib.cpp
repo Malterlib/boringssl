@@ -95,7 +95,7 @@ namespace {
     TCVector<CCleanupEntry> m_CleanupFunctions;
   };
   
-  TCSubSystem<CSubSystem_BoringSSL, ESubSystemDestruction_BeforeMemoryManager> 
+  constinit TCSubSystem<CSubSystem_BoringSSL, ESubSystemDestruction_BeforeMemoryManager>
     g_SubSystem_BoringSSL = {DAggregateInit};
 
   CMalterlibLock::CMalterlibLock() {
@@ -201,7 +201,7 @@ struct COpenSSLThreadLocals {
   }
 };
 
-TCAggregate<TCThreadLocal<COpenSSLThreadLocals>> 
+constinit TCAggregate<TCThreadLocal<COpenSSLThreadLocals>> 
   g_OpenSSLThreadLocals = {DAggregateInit};
 
 void *CRYPTO_get_thread_local(thread_local_data_t index) {
