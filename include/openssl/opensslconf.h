@@ -67,6 +67,7 @@
 #define OPENSSL_NO_STORE
 #define OPENSSL_NO_UI_CONSOLE
 #define OPENSSL_NO_WHIRLPOOL
+#define OPENSSL_NO_SSL_TRACE
 
 // We do not implement OpenSSL's CMS API, except for a tiny subset. Projects
 // targeting the tiny subset can define BORINGSSL_NO_NO_CMS to suppress
