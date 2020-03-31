@@ -574,6 +574,10 @@ struct CRYPTO_once_t {
 // the value `CRYPTO_ONCE_INIT`.
 OPENSSL_EXPORT void CRYPTO_once(CRYPTO_once_t *once, void (*init)());
 
+// CRYPTO_add_cleanup adds a cleanup function that is run at module exit. This
+// matters when BoringSSL is linked statically into a dynamically loaded module.
+OPENSSL_EXPORT void CRYPTO_add_cleanup(void (*cleanup)(void *), void *context);
+
 
 // Atomics.
 //
