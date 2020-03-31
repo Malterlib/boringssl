@@ -145,6 +145,14 @@ static void maybe_set_extra_getrandom_flags(void) {
 
 DEFINE_STATIC_ONCE(rand_once)
 
+static void cleanup_urandom(void *context) {
+  int *urandom_fd_ptr = urandom_fd_bss_get();
+  if (*urandom_fd_ptr != -1 && *urandom_fd_ptr != kHaveGetrandom) {
+    close(*urandom_fd_ptr);
+    *urandom_fd_ptr = -1;
+  }
+}
+
 // init_once initializes the state of this module to values previously
 // requested. This is the only function that modifies |urandom_fd|, which may be
 // read safely after calling the once.
@@ -221,6 +229,7 @@ static void init_once(void) {
     }
   }
   *urandom_fd_bss_get() = fd;
+  CRYPTO_add_cleanup(&cleanup_urandom, NULL);
 }
 
 DEFINE_STATIC_ONCE(wait_for_entropy_once)
