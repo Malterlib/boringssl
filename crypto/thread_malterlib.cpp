@@ -132,6 +132,14 @@ void CRYPTO_once(CRYPTO_once_t *once, void (*init)(void)) {
   }
 }
 
+void CRYPTO_add_cleanup(void (*cleanup)(void *), void *context) {
+  auto &SubSystem = *g_SubSystem_BoringSSL;
+  DLock(SubSystem.m_Lock);
+  auto &Cleanup = SubSystem.m_CleanupFunctions.f_Insert();
+  Cleanup.m_fCleanup = cleanup;
+  Cleanup.m_pContext = context;
+}
+
 void CRYPTO_MUTEX_init(CRYPTO_MUTEX *lock) {
   new ((void *)lock) CMalterlibLock();
 }
