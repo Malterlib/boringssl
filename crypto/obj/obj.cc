@@ -435,6 +435,29 @@ static int cmp_long_name(const ASN1_OBJECT *a, const ASN1_OBJECT *b) {
   return strcmp(a->ln, b->ln);
 }
 
+static void obj_cleanup_object(ASN1_OBJECT *obj, void *arg) {
+  if (obj == nullptr) {
+    return;
+  }
+  obj->flags |= (ASN1_OBJECT_FLAG_DYNAMIC | ASN1_OBJECT_FLAG_DYNAMIC_STRINGS |
+                 ASN1_OBJECT_FLAG_DYNAMIC_DATA);
+  ASN1_OBJECT_free(obj);
+}
+
+static void obj_cleanup_hash(LHASH_OF(ASN1_OBJECT) **hash) {
+  lh_ASN1_OBJECT_free(*hash);
+  *hash = nullptr;
+}
+
+static void obj_cleanup(void *context) {
+  lh_ASN1_OBJECT_doall_arg(global_added_by_nid, &obj_cleanup_object, nullptr);
+
+  obj_cleanup_hash(&global_added_by_nid);
+  obj_cleanup_hash(&global_added_by_data);
+  obj_cleanup_hash(&global_added_by_short_name);
+  obj_cleanup_hash(&global_added_by_long_name);
+}
+
 // obj_add_object inserts `obj` into the various global hashes for run-time
 // added objects. It returns one on success or zero otherwise.
 static int obj_add_object(ASN1_OBJECT *obj) {
@@ -443,6 +466,7 @@ static int obj_add_object(ASN1_OBJECT *obj) {
 
   MutexWriteLock lock(&global_added_lock);
   if (global_added_by_nid == nullptr) {
+    CRYPTO_add_cleanup(&obj_cleanup, NULL);
     global_added_by_nid = lh_ASN1_OBJECT_new(hash_nid, cmp_nid);
   }
   if (global_added_by_data == nullptr) {

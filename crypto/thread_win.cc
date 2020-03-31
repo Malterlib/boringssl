@@ -37,6 +37,8 @@ void CRYPTO_once(CRYPTO_once_t *once, void (*init)()) {
   BSSL_CHECK(InitOnceExecuteOnce(once, call_once_init, &init, nullptr));
 }
 
+void CRYPTO_add_cleanup(void (*cleanup)(void *), void *context) {}
+
 void StaticMutex::LockRead() { AcquireSRWLockShared(&lock_); }
 void StaticMutex::UnlockRead() { ReleaseSRWLockShared(&lock_); }
 void StaticMutex::LockWrite() { AcquireSRWLockExclusive(&lock_); }
