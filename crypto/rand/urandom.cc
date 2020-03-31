@@ -69,6 +69,13 @@ int urandom_fd;
 
 CRYPTO_once_t g_rand_once = CRYPTO_ONCE_INIT;
 
+static void cleanup_urandom(void *context) {
+  if (urandom_fd != -1 && urandom_fd != kHaveGetrandom) {
+    close(urandom_fd);
+    urandom_fd = -1;
+  }
+}
+
 // init_once initializes the state of this module to values previously
 // requested. This is the only function that modifies `urandom_fd`, which may be
 // read safely after calling the once.
@@ -113,6 +120,7 @@ void init_once() {
   }
 
   urandom_fd = fd;
+  CRYPTO_add_cleanup(&cleanup_urandom, NULL);
 }
 
 }  // namespace

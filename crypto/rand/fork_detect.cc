@@ -107,6 +107,13 @@ void init_fork_detect() {
 
   g_fork_detect_addr = new (addr) Atomic<uint32_t>(1);
   g_fork_generation = 1;
+  // Where the library is unloaded, as a module of Malterlib that links it
+  CRYPTO_add_cleanup(
+      [](void *context) {
+        munmap(context, static_cast<size_t>(sysconf(_SC_PAGESIZE)));
+        g_fork_detect_addr = nullptr;
+      },
+      addr);
 }
 
 }  // namespace
@@ -178,6 +185,29 @@ uint64_t bssl::CRYPTO_get_fork_generation() {
 void bssl::CRYPTO_fork_detect_force_madv_wipeonfork_for_testing(int on) {
   g_force_madv_wipeonfork = 1;
   g_force_madv_wipeonfork_enabled = on;
+}
+
+#elif defined(OPENSSL_FORK_DETECTION_MALTERLIB)
+
+namespace {
+
+uint64_t g_malterlib_fork_generation = 1;
+
+}  // namespace
+
+uint64_t bssl::CRYPTO_get_fork_generation() {
+  // Before the first generation is handed out, as a fork after it is only
+  // counted where the subsystem exists
+  CRYPTO_malterlib_check_fork_detection();
+  return g_malterlib_fork_generation;
+}
+
+void bssl::CRYPTO_malterlib_forked_child() {
+  uint64_t value = g_malterlib_fork_generation + 1;
+  if (value == 0) {
+    value = 1;
+  }
+  g_malterlib_fork_generation = value;
 }
 
 #elif defined(OPENSSL_FORK_DETECTION_PTHREAD_ATFORK)

@@ -19,6 +19,13 @@
 #include <openssl/mem.h>
 #include <openssl/type_check.h>
 
+#include "bcm_support.h"
+#include "rand/internal.h"
+
+#if defined(OPENSSL_FORK_DETECTION_MALTERLIB)
+#include <unistd.h>
+#endif
+
 
 BSSL_NAMESPACE_BEGIN
 
@@ -76,6 +83,12 @@ namespace {
 #endif
       m_Lock.f_ForkedChild();
       m_Lock.f_Unlock();
+#if defined(OPENSSL_FORK_DETECTION_MALTERLIB)
+      CRYPTO_malterlib_forked_child();
+#if defined(DMibContractConfigure_CheckEnabled)
+      m_ProcessID = getpid();
+#endif
+#endif
     }
 
     void f_DoCleanup() {
@@ -99,6 +112,9 @@ namespace {
     CMutual m_Lock;
     DLinkDS_List(MalterlibLock, m_Link) m_Mutexes;
     TCVector<CCleanupEntry> m_CleanupFunctions;
+#if defined(OPENSSL_FORK_DETECTION_MALTERLIB) && defined(DMibContractConfigure_CheckEnabled)
+    pid_t m_ProcessID = getpid(); // The process that the fork generation counts the forks of
+#endif
   };
 
   constinit TCSubSystem<CSubSystem_BoringSSL, ESubSystemDestruction_BeforeMemoryManager>
@@ -116,6 +132,18 @@ namespace {
     *g_DoCleanup;
   }
 }
+
+#if defined(OPENSSL_FORK_DETECTION_MALTERLIB)
+void CRYPTO_malterlib_check_fork_detection() {
+  [[maybe_unused]] auto &SubSystem = *g_SubSystem_BoringSSL;
+#if defined(DMibContractConfigure_CheckEnabled)
+  // A child that the subsystem wasn't told about, as of a process that forks
+  // with BoringSSL in a dynamic library, would draw the random numbers of its
+  // parent
+  DMibCheck(SubSystem.m_ProcessID == getpid());
+#endif
+}
+#endif
 
 MalterlibLock::MalterlibLock() {
   auto &SubSystem = *g_SubSystem_BoringSSL;
@@ -138,6 +166,14 @@ void CRYPTO_once(CRYPTO_once_t *once, void (*init)()) {
     init();
     once->m_bInited.f_Store(true);
   }
+}
+
+void CRYPTO_add_cleanup(void (*cleanup)(void *), void *context) {
+  auto &SubSystem = *g_SubSystem_BoringSSL;
+  DLock(SubSystem.m_Lock);
+  auto &Cleanup = SubSystem.m_CleanupFunctions.f_Insert();
+  Cleanup.m_fCleanup = cleanup;
+  Cleanup.m_pContext = context;
 }
 
 struct COpenSSLThreadLocals {

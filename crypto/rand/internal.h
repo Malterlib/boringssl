@@ -44,6 +44,15 @@
 #define OPENSSL_FORK_DETECTION
 #define OPENSSL_FORK_DETECTION_WIPEONFORK
 
+#elif (defined(OPENSSL_MACOS) || defined(OPENSSL_IOS)) && \
+    defined(OPENSSL_THREADS) && defined(DMalterlib)
+
+// In Malterlib, the subsystem of BoringSSL counts the forks, as Malterlib
+// tells its subsystems about them for the process: a pthread_atfork handler of
+// a library can't be removed when the library is unloaded.
+#define OPENSSL_FORK_DETECTION
+#define OPENSSL_FORK_DETECTION_MALTERLIB
+
 #elif defined(OPENSSL_MACOS) || defined(OPENSSL_IOS)
 
 // These platforms may detect address space duplication with pthread_atfork.

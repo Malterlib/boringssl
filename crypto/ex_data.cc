@@ -38,6 +38,28 @@ struct ExDataFuncs {
   ExDataFuncs *next;
 };
 
+static void CRYPTO_cleanup_ex_data(void *context) {
+  ExDataClass *ex_data_class = reinterpret_cast<ExDataClass *>(context);
+
+  uint32_t num_funcs = ex_data_class->num_funcs.load();
+  // `CRYPTO_get_ex_new_index` will not allocate indices beyond `INT_MAX`.
+  assert(num_funcs <= (size_t)(INT_MAX - ex_data_class->num_reserved));
+
+  // Defer dereferencing `ex_data_class->funcs` and `funcs->next`. It must come
+  // after the `num_funcs` comparison to be correctly synchronized.
+  ExDataFuncs *funcs = ex_data_class->funcs;
+  for (uint32_t i = 0; i < num_funcs; i++) {
+    ExDataFuncs *next_funcs = funcs->next;
+    Delete(funcs);
+    funcs = next_funcs;
+  }
+
+  ex_data_class->funcs = nullptr;
+  ex_data_class->last = nullptr;
+  assert(ex_data_class->num_funcs.load() == num_funcs);
+  ex_data_class->num_funcs.store(0);
+}
+
 int CRYPTO_get_ex_new_index_ex(ExDataClass *ex_data_class, long argl,
                                void *argp, CRYPTO_EX_free *free_func) {
   ExDataFuncs *funcs = New<ExDataFuncs>();
@@ -61,6 +83,7 @@ int CRYPTO_get_ex_new_index_ex(ExDataClass *ex_data_class, long argl,
 
   // Append `funcs` to the linked list.
   if (ex_data_class->last == nullptr) {
+    CRYPTO_add_cleanup(&CRYPTO_cleanup_ex_data, ex_data_class);
     assert(num_funcs == 0);
     ex_data_class->funcs = funcs;
     ex_data_class->last = funcs;

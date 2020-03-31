@@ -33,6 +33,8 @@ void bssl::CRYPTO_once(CRYPTO_once_t *once, void (*init)()) {
   init();
 }
 
+void bssl::CRYPTO_add_cleanup(void (*cleanup)(void *), void *context) {}
+
 static void *g_thread_locals[NUM_OPENSSL_THREAD_LOCALS];
 
 void *bssl::CRYPTO_get_thread_local(thread_local_data_t index) {

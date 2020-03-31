@@ -48,6 +48,17 @@ void CRYPTO_sysrand(uint8_t *buf, size_t len);
 // should only be used as a hardening measure.
 OPENSSL_EXPORT uint64_t CRYPTO_get_fork_generation();
 
+// CRYPTO_malterlib_forked_child counts a fork for CRYPTO_get_fork_generation,
+// where the subsystem of BoringSSL in Malterlib detects them. It runs in the
+// child, which is single threaded.
+void CRYPTO_malterlib_forked_child();
+
+// CRYPTO_malterlib_check_fork_detection creates the subsystem of BoringSSL,
+// which Malterlib only tells about forks once it exists. In debug builds it
+// checks that the subsystem was told about every fork of the process, which
+// Malterlib doesn't do in a dynamic library.
+void CRYPTO_malterlib_check_fork_detection();
+
 // CRYPTO_fork_detect_force_madv_wipeonfork_for_testing is an internal detail
 // used for testing purposes.
 OPENSSL_EXPORT void CRYPTO_fork_detect_force_madv_wipeonfork_for_testing(
