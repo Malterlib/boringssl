@@ -358,4 +358,12 @@ BSSL_NAMESPACE_END
 #define DH_R_DECODE_ERROR 104
 #define DH_R_ENCODE_ERROR 105
 
+// Nodejs compatibility section (hidden).
+//
+// These defines exist for node.js, with the hope that we can eliminate the
+// need for them over time.
+
+#define DHerr(function, reason) \
+  ERR_put_error(ERR_LIB_DH, 0, reason, __FILE__, __LINE__)
+
 #endif  // OPENSSL_HEADER_DH_H
