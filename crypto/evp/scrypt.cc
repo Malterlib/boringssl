@@ -149,10 +149,11 @@ static void scryptROMix(block_t *B, uint64_t r, uint64_t N, block_t *T,
 // `EVP_PBE_scrypt`.
 #define SCRYPT_MAX_MEM (1024 * 1024 * 65)
 
-int EVP_PBE_scrypt(const char *password, size_t password_len,
-                   const uint8_t *salt, size_t salt_len, uint64_t N, uint64_t r,
-                   uint64_t p, size_t max_mem, uint8_t *out_key,
-                   size_t key_len) {
+int EVP_PBE_scrypt_with_digest(const char *password, size_t password_len,
+                               const uint8_t *salt, size_t salt_len, uint64_t N,
+                               uint64_t r, uint64_t p, size_t max_mem,
+                               const EVP_MD *digest, uint8_t *out_key,
+                               size_t key_len) {
   if (r == 0 || p == 0 || p > SCRYPT_PR_MAX / r ||
       // `N` must be a power of two.
       N < 2 || (N & (N - 1)) ||
@@ -197,7 +198,7 @@ int EVP_PBE_scrypt(const char *password, size_t password_len,
   // or `iterations` of 0 (we pass 1 here). This is consistent with
   // the documented failure conditions of EVP_PBE_scrypt.
   if (!PKCS5_PBKDF2_HMAC(password, password_len, salt, salt_len, 1,
-                         EVP_sha256(), B_bytes, (uint8_t *)B)) {
+                         digest, B_bytes, (uint8_t *)B)) {
     goto err;
   }
 
@@ -206,7 +207,7 @@ int EVP_PBE_scrypt(const char *password, size_t password_len,
   }
 
   if (!PKCS5_PBKDF2_HMAC(password, password_len, (const uint8_t *)B, B_bytes, 1,
-                         EVP_sha256(), key_len, out_key)) {
+                         digest, key_len, out_key)) {
     goto err;
   }
 
@@ -215,4 +216,12 @@ int EVP_PBE_scrypt(const char *password, size_t password_len,
 err:
   OPENSSL_free(B);
   return ret;
+}
+
+int EVP_PBE_scrypt(const char *password, size_t password_len,
+                   const uint8_t *salt, size_t salt_len, uint64_t N, uint64_t r,
+                   uint64_t p, size_t max_mem, uint8_t *out_key,
+                   size_t key_len) {
+  return EVP_PBE_scrypt_with_digest(password, password_len, salt, salt_len, N, r,
+                                    p, max_mem, EVP_sha256(), out_key, key_len);
 }
