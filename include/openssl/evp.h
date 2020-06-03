@@ -507,7 +507,16 @@ OPENSSL_EXPORT int PKCS5_PBKDF2_HMAC_SHA1(const char *password,
 // - |N| is not a power of two
 // - |N| > 2^32
 // - |N| > 2^(128 * |r| / 8)
-OPENSSL_EXPORT int EVP_PBE_scrypt(const char *password, size_t password_len,
+OPENSSL_EXPORT int EVP_PBE_scrypt_with_digest(const char *password, size_t password_len,
+                                  const uint8_t *salt, size_t salt_len,
+                                  uint64_t N, uint64_t r, uint64_t p,
+                                  size_t max_mem, const EVP_MD *digest,
+                                  uint8_t *out_key, size_t key_len);
+
+// EVP_PBE_scrypt is the same as EVP_PBE_scrypt_with_digest, but with |digest|
+// fixed to |EVP_sha256|.
+OPENSSL_EXPORT int EVP_PBE_scrypt(const char *password,
+                                  size_t password_len,
                                   const uint8_t *salt, size_t salt_len,
                                   uint64_t N, uint64_t r, uint64_t p,
                                   size_t max_mem, uint8_t *out_key,
