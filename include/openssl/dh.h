@@ -333,4 +333,9 @@ BSSL_NAMESPACE_END
 #define DH_R_ENCODE_ERROR 105
 #define DH_R_INVALID_PARAMETERS 106
 
+// Nodejs compatibility section (hidden).
+
+#define DHerr(function, reason) \
+  ERR_put_error(ERR_LIB_DH, 0, reason, __FILE__, __LINE__)
+
 #endif  // OPENSSL_HEADER_DH_H

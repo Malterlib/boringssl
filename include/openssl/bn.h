@@ -983,4 +983,9 @@ BSSL_NAMESPACE_END
 #define BN_R_ENCODE_ERROR 118
 #define BN_R_INVALID_INPUT 119
 
+// Nodejs compatibility section (hidden).
+
+#define BNerr(function, reason) \
+  ERR_put_error(ERR_LIB_BN, 0, reason, __FILE__, __LINE__)
+
 #endif  // OPENSSL_HEADER_BN_H
