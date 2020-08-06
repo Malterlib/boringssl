@@ -414,7 +414,9 @@ static const char *err_reason_error_string(uint32_t packed_error, int symbol) {
 
   if (lib == ERR_LIB_SYS) {
     if (!symbol && reason < 127) {
-      return strerror(reason);
+      // strerror is not thread safe
+      //return strerror(reason);
+      return NULL;
     }
     return nullptr;
   }
