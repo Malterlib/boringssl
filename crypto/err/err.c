@@ -548,9 +548,11 @@ const char *ERR_reason_error_string(uint32_t packed_error) {
   const uint32_t reason = ERR_GET_REASON(packed_error);
 
   if (lib == ERR_LIB_SYS) {
-    if (reason < 127) {
-      return strerror(reason);
-    }
+    // strerror is not thread safe
+    //
+    // if (reason < 127) {
+    //  return strerror(reason);
+    //}
     return NULL;
   }
 
