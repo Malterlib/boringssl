@@ -340,12 +340,12 @@ TEST(ErrTest, String) {
   EXPECT_STREQ(ERR_reason_symbol_name(err), "USER_LIB");
 
   // Errors in `ERR_LIB_SYS` are `errno` values, so we don't have their symbolic
-  // names. Their human-readable strings are OS- and even locale-dependent.
+  // names. Their strings would come from `strerror`, which may use shared
+  // mutable storage, so they are unknown.
   err = ERR_PACK(ERR_LIB_SYS, ERANGE);
   EXPECT_STREQ(ERR_lib_error_string(err), "system library");
   EXPECT_STREQ(ERR_lib_symbol_name(err), "SYS");
-  EXPECT_NE(ERR_reason_error_string(err), nullptr);
-  EXPECT_STRNE(ERR_reason_error_string(err), "unknown error");
+  EXPECT_STREQ(ERR_reason_error_string(err), "unknown error");
   EXPECT_EQ(ERR_reason_symbol_name(err), nullptr);
 }
 
