@@ -480,7 +480,7 @@ typedef INIT_ONCE CRYPTO_once_t;
 typedef pthread_once_t CRYPTO_once_t;
 #define CRYPTO_ONCE_INIT PTHREAD_ONCE_INIT
 #elif defined(OPENSSL_MALTERLIB_THREADS)
-typedef size_t CRYPTO_once_t [4];
+typedef size_t CRYPTO_once_t [5];
 #define CRYPTO_ONCE_INIT {0}
 #else
 #error "Unknown threading library"
