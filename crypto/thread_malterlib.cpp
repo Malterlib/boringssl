@@ -111,13 +111,13 @@ namespace {
   }
 }
 
-using CStaticLock = TCAggregate<CMalterlibLock, 128, CSpinLockAggregate>;
+using CStaticLock = TCAggregate<CMalterlibLock, 128, CLowLevelLockAggregate>;
 
 static_assert(sizeof(CRYPTO_STATIC_MUTEX) >= sizeof(CStaticLock), "Incorrect size");
 static_assert(sizeof(CRYPTO_MUTEX) >= sizeof(CMalterlibLock), "Incorrect size");
 
 struct CInitOnce {
-  CSpinLockAggregate m_Lock;
+  CLowLevelLockAggregate m_Lock;
   size_t m_bInited;
 };
 
