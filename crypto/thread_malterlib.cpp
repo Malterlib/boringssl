@@ -32,10 +32,14 @@ namespace {
   };
 
   struct CSubSystem_BoringSSL : public CSubSystem {
+    // Thread sanitizer has a limited amount of tracked locks, so this will exhaust that...
     void f_PrepareFork() override {
+#ifndef DMibSanitizerEnabled_Thread
       while (true)
       {
+#endif
         m_Lock.f_Lock();
+#ifndef DMibSanitizerEnabled_Thread
         bool bAborted = false;
         for (auto iMutex = m_Mutexes.f_GetIterator(); iMutex; ++iMutex) {
           if (!iMutex->f_TryLock()) {
@@ -50,26 +54,33 @@ namespace {
         if (!bAborted)
           break;
       }
+#endif
       m_Lock.f_PrepareFork();
+#ifndef DMibSanitizerEnabled_Thread
       for (auto &Mutex : m_Mutexes) {
         Mutex.f_PrepareFork();
       }
+#endif
     }
     
     void f_ForkedParent() override {
+#ifndef DMibSanitizerEnabled_Thread
       for (auto &Mutex : m_Mutexes) {
         Mutex.f_ForkedParent();
         Mutex.f_Unlock();
       }
+#endif
       m_Lock.f_ForkedParent();
       m_Lock.f_Unlock();
     }
     
     void f_ForkedChild() override {
+#ifndef DMibSanitizerEnabled_Thread
       for (auto &Mutex : m_Mutexes) {
         Mutex.f_ForkedChild();
         Mutex.f_Unlock();
       }
+#endif
       m_Lock.f_ForkedChild();
       m_Lock.f_Unlock();
     }
