@@ -118,17 +118,20 @@ static_assert(sizeof(CRYPTO_MUTEX) >= sizeof(CMalterlibLock), "Incorrect size");
 
 struct CInitOnce {
   CLowLevelLockAggregate m_Lock;
-  size_t m_bInited;
+  TCAtomic<bool> m_bInited;
 };
 
 static_assert(sizeof(CRYPTO_once_t) >= sizeof(CInitOnce), "Incorrect size");
 
 void CRYPTO_once(CRYPTO_once_t *once, void (*init)(void)) {
   CInitOnce *pInit = fg_AutoReinterpretCast(once);
+  if (pInit->m_bInited.f_Load(EMemoryOrder_Acquire))
+    return;
+
   DLock(pInit->m_Lock);
-  if (!pInit->m_bInited) {
+  if (!pInit->m_bInited.f_Load()) {
     init();
-    pInit->m_bInited = true;
+    pInit->m_bInited.f_Store(true);
   }
 }
 
