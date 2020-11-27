@@ -14,38 +14,34 @@
 
 #include "internal.h"
 
+#if defined(OPENSSL_CXX_ATOMIC)
 
-#if defined(OPENSSL_C11_ATOMIC)
-
-#include <assert.h>
-#include <stdalign.h>
-#include <stdatomic.h>
-#include <stdlib.h>
+#include <atomic>
 
 
 // See comment above the typedef of CRYPTO_refcount_t about these tests.
-static_assert(alignof(CRYPTO_refcount_t) == alignof(_Atomic CRYPTO_refcount_t),
-              "_Atomic alters the needed alignment of a reference count");
-static_assert(sizeof(CRYPTO_refcount_t) == sizeof(_Atomic CRYPTO_refcount_t),
-              "_Atomic alters the size of a reference count");
+static_assert(alignof(CRYPTO_refcount_t) == alignof(std::atomic<CRYPTO_refcount_t>),
+              "std::atomic alters the needed alignment of a reference count");
+static_assert(sizeof(CRYPTO_refcount_t) == sizeof(std::atomic<CRYPTO_refcount_t>),
+              "std::atomic alters the size of a reference count");
 
 static_assert((CRYPTO_refcount_t)-1 == CRYPTO_REFCOUNT_MAX,
               "CRYPTO_REFCOUNT_MAX is incorrect");
 
 void CRYPTO_refcount_inc(CRYPTO_refcount_t *in_count) {
-  _Atomic CRYPTO_refcount_t *count = (_Atomic CRYPTO_refcount_t *) in_count;
-  uint32_t expected = atomic_load(count);
+  std::atomic<CRYPTO_refcount_t> *count = (std::atomic<CRYPTO_refcount_t> *) in_count;
+  uint32_t expected = count->load();
 
   while (expected != CRYPTO_REFCOUNT_MAX) {
     uint32_t new_value = expected + 1;
-    if (atomic_compare_exchange_weak(count, &expected, new_value)) {
+    if (count->compare_exchange_weak(expected, new_value)) {
       break;
     }
   }
 }
 
 int CRYPTO_refcount_dec_and_test_zero(CRYPTO_refcount_t *in_count) {
-  _Atomic CRYPTO_refcount_t *count = (_Atomic CRYPTO_refcount_t *)in_count;
+  std::atomic<CRYPTO_refcount_t> *count = (std::atomic<CRYPTO_refcount_t> *)in_count;
   uint32_t expected = atomic_load(count);
 
   for (;;) {
@@ -55,11 +51,11 @@ int CRYPTO_refcount_dec_and_test_zero(CRYPTO_refcount_t *in_count) {
       return 0;
     } else {
       const uint32_t new_value = expected - 1;
-      if (atomic_compare_exchange_weak(count, &expected, new_value)) {
+      if (count->compare_exchange_weak(expected, new_value)) {
         return new_value == 0;
       }
     }
   }
 }
 
-#endif  // OPENSSL_C11_ATOMIC
+#endif  // OPENSSL_CXX_ATOMIC
