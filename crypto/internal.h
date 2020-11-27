@@ -503,12 +503,8 @@ OPENSSL_EXPORT void CRYPTO_add_cleanup(void (*cleanup)(void *), void *context);
 
 // Reference counting.
 
-// Automatically enable C11 atomics if implemented.
-#if !defined(OPENSSL_C11_ATOMIC) && defined(OPENSSL_THREADS) &&   \
-    !defined(__STDC_NO_ATOMICS__) && defined(__STDC_VERSION__) && \
-    __STDC_VERSION__ >= 201112L
-#define OPENSSL_C11_ATOMIC
-#endif
+// All compiler should support std::atomic now
+#define OPENSSL_CXX_ATOMIC
 
 // CRYPTO_REFCOUNT_MAX is the value at which the reference count saturates.
 #define CRYPTO_REFCOUNT_MAX 0xffffffff
