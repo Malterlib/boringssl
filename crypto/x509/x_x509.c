@@ -120,6 +120,10 @@ static int x509_cb(int operation, ASN1_VALUE **pval, const ASN1_ITEM *it,
         long version = 0;
         if (ret->cert_info->version != NULL) {
             version = ASN1_INTEGER_get(ret->cert_info->version);
+#ifdef OPENSSL_ALLOW_MALFORMED_X509_VERSION
+            if (version == 3)
+              version = 2;
+#endif
             /* TODO(https://crbug.com/boringssl/364): |version| = 0 should also
              * be rejected. This means an explicitly-encoded X.509v1 version.
              * v1 is DEFAULT, so DER requires it be omitted. */
