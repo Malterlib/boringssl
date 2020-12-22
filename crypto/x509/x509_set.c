@@ -62,7 +62,12 @@
 
 long X509_get_version(const X509 *x509)
 {
-    return ASN1_INTEGER_get(x509->cert_info->version);
+    long version = ASN1_INTEGER_get(x509->cert_info->version);
+#ifdef OPENSSL_ALLOW_MALFORMED_X509_VERSION
+    if (version == 3)
+      version = 2;
+#endif
+  return version;
 }
 
 X509_CINF *X509_get_cert_info(const X509 *x509)
