@@ -4893,8 +4893,13 @@ TEST(X509Test, InvalidVersion) {
   EXPECT_TRUE(ErrorsAreAndClear({{ERR_LIB_X509, X509_R_INVALID_VERSION}}));
   EXPECT_FALSE(CertFromPEM(kNegativeVersionPEM));
   EXPECT_TRUE(ErrorsAreAndClear({{ERR_LIB_ASN1, ASN1_R_DECODE_ERROR}}));
+#if defined(OPENSSL_ALLOW_MALFORMED_X509_VERSION)
+  // Read as v3, as certificates in use have it
+  EXPECT_TRUE(CertFromPEM(kFutureVersionPEM));
+#else
   EXPECT_FALSE(CertFromPEM(kFutureVersionPEM));
   EXPECT_TRUE(ErrorsAreAndClear({{ERR_LIB_X509, X509_R_INVALID_VERSION}}));
+#endif
   EXPECT_FALSE(CertFromPEM(kOverflowVersionPEM));
   EXPECT_TRUE(ErrorsAreAndClear({{ERR_LIB_ASN1, ASN1_R_DECODE_ERROR}}));
   EXPECT_FALSE(CertFromPEM(kV1WithExtensionsPEM));
