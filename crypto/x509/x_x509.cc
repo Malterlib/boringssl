@@ -107,6 +107,10 @@ X509 *X509_parse_with_algorithms(CRYPTO_BUFFER *buf,
       OPENSSL_PUT_ERROR(ASN1, ASN1_R_DECODE_ERROR);
       return nullptr;
     }
+#ifdef OPENSSL_ALLOW_MALFORMED_X509_VERSION
+    if (version == 3)
+      version = 2;
+#endif
     // The version must be one of v1(0), v2(1), or v3(2).
     // TODO(https://crbug.com/42290225): Also reject `X509_VERSION_1`. v1 is
     // DEFAULT, so DER requires it be omitted.
