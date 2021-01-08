@@ -2278,6 +2278,12 @@ OPENSSL_EXPORT int SSL_CTX_set1_curves_list(SSL_CTX *ctx, const char *curves);
 // failure.
 OPENSSL_EXPORT int SSL_set1_curves_list(SSL *ssl, const char *curves);
 
+// For compatibility with OpenSSL
+# define SSL_CTX_set1_groups 			SSL_CTX_set1_curves
+# define SSL_CTX_set1_groups_list 		SSL_CTX_set1_curves_list
+# define SSL_set1_groups 				SSL_set1_curves
+# define SSL_set1_groups_list 			SSL_set1_curves_list
+
 // SSL_CURVE_* define TLS curve IDs.
 #define SSL_CURVE_SECP224R1 21
 #define SSL_CURVE_SECP256R1 23
@@ -4165,6 +4171,10 @@ enum ssl_select_cert_result_t BORINGSSL_ENUM_INT {
   // handshake should be terminated.
   ssl_select_cert_error = -1,
 };
+
+int SSL_client_hello_get0_ext(SSL *s, uint16_t extension_type, const unsigned char **out,
+                       size_t *outlen);
+size_t SSL_client_hello_get0_ciphers(SSL *s, const unsigned char **out);
 
 // SSL_early_callback_ctx_extension_get searches the extensions in
 // |client_hello| for an extension of the given type. If not found, it returns

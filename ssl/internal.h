@@ -2259,6 +2259,9 @@ OPENSSL_EXPORT bool ssl_client_hello_init(const SSL *ssl, SSL_CLIENT_HELLO *out,
 bool ssl_client_hello_get_extension(const SSL_CLIENT_HELLO *client_hello,
                                     CBS *out, uint16_t extension_type);
 
+int SSL_client_hello_get0_ext(SSL *s, uint16_t extension_type, const unsigned char **out,
+                       size_t *outlen);
+
 bool ssl_client_cipher_list_contains_cipher(
     const SSL_CLIENT_HELLO *client_hello, uint16_t id);
 
