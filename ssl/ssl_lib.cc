@@ -3066,3 +3066,15 @@ int SSL_CTX_set_tlsext_status_arg(SSL_CTX *ctx, void *arg) {
   ctx->legacy_ocsp_callback_arg = arg;
   return 1;
 }
+
+size_t SSL_client_hello_get0_ciphers(SSL *s, const unsigned char **out) {
+  OPENSSL_PUT_ERROR(SSL, SSL_R_CUSTOM_EXTENSION_ERROR);
+  return 0;
+}
+
+int SSL_client_hello_get0_ext(SSL *s, uint16_t extension_type, const unsigned char **out,
+                       size_t *outlen) {
+  OPENSSL_PUT_ERROR(SSL, SSL_R_CUSTOM_EXTENSION_ERROR);
+  return 0;
+}
+
