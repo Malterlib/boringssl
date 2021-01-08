@@ -221,6 +221,8 @@ OPENSSL_EXPORT int EC_POINT_get_affine_coordinates_GFp(const EC_GROUP *group,
                                                        BIGNUM *x, BIGNUM *y,
                                                        BN_CTX *ctx);
 
+#define EC_POINT_get_affine_coordinates EC_POINT_get_affine_coordinates_GFp
+
 // EC_POINT_set_affine_coordinates_GFp sets the value of |point| to be
 // (|x|, |y|). The |ctx| argument may be used if not NULL. It returns one
 // on success or zero on error. It's considered an error if the point is not on
