@@ -68,6 +68,7 @@ if(NOT OPENSSL_NO_ASM)
 endif()
 
 function(perlasm dest src)
+  set(dest ${CMAKE_CURRENT_BINARY_DIR}/${dest})
   get_filename_component(dir ${dest} DIRECTORY)
   if(dir STREQUAL "")
     set(dir ".")
