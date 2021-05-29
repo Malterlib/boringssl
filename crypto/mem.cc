@@ -58,7 +58,19 @@ static void __asan_unpoison_memory_region(const void *addr, size_t size) {}
 // EDK2 targets UEFI but builds as ELF and then translates the binary to
 // COFF(!). Thus it builds with __ELF__ defined but cannot actually cope with
 // weak symbols.
-#if !defined(__EDK2_BORINGSSL__) && defined(__ELF__) && defined(__GNUC__)
+//
+// On Mach-O a weak reference must still resolve when linking, so the hooks
+// are weak pointers that BoringSSL defines. A build with prefixed symbols
+// defines them with its prefix, and an application sets the prefixed names.
+#if defined(__MACH__)
+#if defined(BORINGSSL_PREFIX)
+#define OPENSSL_memory_alloc BORINGSSL_ADD_PREFIX(OPENSSL_memory_alloc)
+#define OPENSSL_memory_free BORINGSSL_ADD_PREFIX(OPENSSL_memory_free)
+#define OPENSSL_memory_get_size BORINGSSL_ADD_PREFIX(OPENSSL_memory_get_size)
+#endif
+#define WEAK_SYMBOL_FUNC(rettype, name, args) \
+  rettype (* name) args __attribute__((weak)) = NULL;
+#elif !defined(__EDK2_BORINGSSL__) && defined(__ELF__) && defined(__GNUC__)
 #define WEAK_SYMBOL_FUNC(rettype, name, args) \
   extern "C" {                                \
   rettype name args __attribute__((weak));    \
