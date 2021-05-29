@@ -86,7 +86,10 @@ static void __asan_unpoison_memory_region(const void *addr, size_t size) {}
 // Windows doesn't really support weak symbols as of May 2019, and Clang on
 // Windows will emit strong symbols instead. See
 // https://bugs.llvm.org/show_bug.cgi?id=37598
-#if defined(__ELF__) && defined(__GNUC__)
+#if defined(__MACH__)
+#define WEAK_SYMBOL_FUNC(rettype, name, args) \
+  rettype (* name) args __attribute__((weak)) = NULL;
+#elif defined(__ELF__)&& defined(__GNUC__)
 #define WEAK_SYMBOL_FUNC(rettype, name, args) \
   rettype name args __attribute__((weak));
 #else
