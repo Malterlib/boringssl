@@ -91,6 +91,9 @@ OPENSSL_EXPORT void *OPENSSL_realloc(void *ptr, size_t new_size);
 // |memset_s| from C11.
 OPENSSL_EXPORT void OPENSSL_cleanse(void *ptr, size_t len);
 
+OPENSSL_EXPORT void OPENSSL_secure_clear_free(void *ptr, size_t unused);
+OPENSSL_EXPORT void *OPENSSL_secure_malloc(size_t size);
+
 // CRYPTO_memcmp returns zero iff the |len| bytes at |a| and |b| are equal. It
 // takes an amount of time dependent on |len|, but independent of the contents
 // of |a| and |b|. Unlike memcmp, it cannot be used to put elements into a

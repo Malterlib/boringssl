@@ -128,6 +128,10 @@ WEAK_SYMBOL_FUNC(void*, OPENSSL_memory_alloc, (size_t size));
 WEAK_SYMBOL_FUNC(void, OPENSSL_memory_free, (void *ptr));
 WEAK_SYMBOL_FUNC(size_t, OPENSSL_memory_get_size, (void *ptr));
 
+void *OPENSSL_secure_malloc(size_t size) {
+  return OPENSSL_malloc(size);
+}
+
 void *OPENSSL_malloc(size_t size) {
   if (OPENSSL_memory_alloc != NULL) {
     assert(OPENSSL_memory_free != NULL);
@@ -216,6 +220,10 @@ void OPENSSL_cleanse(void *ptr, size_t len) {
   __asm__ __volatile__("" : : "r"(ptr) : "memory");
 #endif
 #endif  // !OPENSSL_NO_ASM
+}
+
+void OPENSSL_secure_clear_free(void *ptr, size_t unused) {
+  OPENSSL_clear_free(ptr, unused);
 }
 
 void OPENSSL_clear_free(void *ptr, size_t unused) {
