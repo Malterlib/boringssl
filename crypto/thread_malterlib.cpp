@@ -85,13 +85,15 @@ namespace {
       m_Lock.f_Unlock();
     }
 
-    void f_DestroyAggregates(bool _bDestroySystem) override {
+    void f_DoCleanup() {
       for (auto &Cleanup : m_CleanupFunctions) {
         Cleanup.m_fCleanup(Cleanup.m_pContext);
       }
       m_CleanupFunctions.f_Clear();
     }
-    
+
+    CSubSystem_BoringSSL();
+
     ~CSubSystem_BoringSSL() {
       DMibRequire(m_CleanupFunctions.f_IsEmpty());
     }
@@ -120,9 +122,21 @@ namespace {
     DLock(SubSystem.m_Lock);
     SubSystem.m_Mutexes.f_Remove(this);
   }
+
+  struct CSubSystem_BoringSSL_Cleanup {
+    ~CSubSystem_BoringSSL_Cleanup(){
+      g_SubSystem_BoringSSL->f_DoCleanup();
+    }
+  };
+
+  constinit TCAggregate<CSubSystem_BoringSSL_Cleanup, 127, CLowLevelLockAggregate> g_DoCleanup = {DAggregateInit};
+
+  CSubSystem_BoringSSL::CSubSystem_BoringSSL() {
+    *g_DoCleanup;
+  }
 }
 
-using CStaticLock = TCAggregate<CMalterlibLock, 128, CLowLevelLockAggregate>;
+using CStaticLock = TCAggregate<CMalterlibLock, 125, CLowLevelLockAggregate>;
 
 static_assert(sizeof(CRYPTO_STATIC_MUTEX) >= sizeof(CStaticLock), "Incorrect size");
 static_assert(sizeof(CRYPTO_MUTEX) >= sizeof(CMalterlibLock), "Incorrect size");
@@ -215,7 +229,7 @@ struct COpenSSLThreadLocals {
   }
 };
 
-constinit TCAggregate<TCThreadLocal<COpenSSLThreadLocals>> 
+constinit TCAggregate<TCThreadLocal<COpenSSLThreadLocals>, 126>
   g_OpenSSLThreadLocals = {DAggregateInit};
 
 void *CRYPTO_get_thread_local(thread_local_data_t index) {
