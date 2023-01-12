@@ -3947,3 +3947,14 @@ void SSL_set_server_padding_enabled(SSL *ssl, int enabled) {
 int SSL_server_sent_requested_padding(const SSL *ssl) {
   return FromOpaque(ssl)->s3->server_sent_requested_padding;
 }
+
+size_t SSL_client_hello_get0_ciphers(SSL *s, const unsigned char **out) {
+  OPENSSL_PUT_ERROR(SSL, SSL_R_CUSTOM_EXTENSION_ERROR);
+  return 0;
+}
+
+int SSL_client_hello_get0_ext(SSL *s, uint16_t extension_type,
+                              const unsigned char **out, size_t *outlen) {
+  OPENSSL_PUT_ERROR(SSL, SSL_R_CUSTOM_EXTENSION_ERROR);
+  return 0;
+}

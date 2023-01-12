@@ -5363,6 +5363,10 @@ enum ssl_select_cert_result_t BORINGSSL_ENUM_INT {
   ssl_select_cert_disable_ech = -2,
 };
 
+int SSL_client_hello_get0_ext(SSL *s, uint16_t extension_type, const unsigned char **out,
+                       size_t *outlen);
+size_t SSL_client_hello_get0_ciphers(SSL *s, const unsigned char **out);
+
 // SSL_early_callback_ctx_extension_get searches the extensions in
 // `client_hello` for an extension of the given type. If not found, it returns
 // zero. Otherwise it sets `out_data` to point to the extension contents (not
