@@ -3205,3 +3205,14 @@ int SSL_set_compliance_policy(SSL *ssl, enum ssl_compliance_policy_t policy) {
       return 0;
   }
 }
+
+size_t SSL_client_hello_get0_ciphers(SSL *s, const unsigned char **out) {
+  OPENSSL_PUT_ERROR(SSL, SSL_R_CUSTOM_EXTENSION_ERROR);
+  return 0;
+}
+
+int SSL_client_hello_get0_ext(SSL *s, uint16_t extension_type, const unsigned char **out,
+                       size_t *outlen) {
+  OPENSSL_PUT_ERROR(SSL, SSL_R_CUSTOM_EXTENSION_ERROR);
+  return 0;
+}
