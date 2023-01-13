@@ -41,6 +41,8 @@ using namespace bssl;
 #define OPENSSL_MALLOC_PREFIX 8
 static_assert(OPENSSL_MALLOC_PREFIX >= sizeof(size_t), "size_t too large");
 
+#ifndef DMalterlib
+
 #if defined(OPENSSL_ASAN)
 extern "C" {
 void __asan_poison_memory_region(const volatile void *addr, size_t size);
@@ -295,6 +297,8 @@ void *OPENSSL_realloc(void *orig_ptr, size_t new_size) {
 
   return ret;
 }
+
+#endif
 
 void OPENSSL_cleanse(void *ptr, size_t len) {
 #if defined(OPENSSL_WINDOWS)
