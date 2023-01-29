@@ -139,7 +139,8 @@ int i2c_ASN1_INTEGER(const ASN1_INTEGER *in, unsigned char **outp) {
   if (pad) {
     (*outp)[0] = 0;
   }
-  OPENSSL_memcpy(*outp + pad, CBS_data(&cbs), CBS_len(&cbs));
+  if (CBS_len(&cbs))
+    OPENSSL_memcpy(*outp + pad, CBS_data(&cbs), CBS_len(&cbs));
   if (is_negative) {
     negate_twos_complement(*outp, len);
     assert((*outp)[0] >= 0x80);
