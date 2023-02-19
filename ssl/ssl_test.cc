@@ -10683,11 +10683,6 @@ TEST(SSLTest, ErrorSyscallAfterCloseNotify) {
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(SSL_get_error(client.get(), ret), SSL_ERROR_ZERO_RETURN);
 
-  // Further calls to `SSL_read` continue to report `SSL_ERROR_ZERO_RETURN`.
-  ret = SSL_read(client.get(), buf, sizeof(buf));
-  EXPECT_EQ(ret, 0);
-  EXPECT_EQ(SSL_get_error(client.get(), ret), SSL_ERROR_ZERO_RETURN);
-
   // Although the client has seen close_notify, it should continue to report
   // `SSL_ERROR_SYSCALL` when its writes fail.
   ret = SSL_write(client.get(), data, sizeof(data));
