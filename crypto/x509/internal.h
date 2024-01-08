@@ -382,9 +382,11 @@ class X509Store : public x509_store_st, public RefCounted<X509Store> {
   // Callbacks for various operations
   X509_STORE_CTX_verify_cb verify_cb = nullptr;  // error callback
 
+  CRYPTO_EX_DATA ex_data;
+
  private:
   friend RefCounted;
-  ~X509Store() = default;
+  ~X509Store();
 } /* X509_STORE */;
 
 BSSL_NAMESPACE_END
