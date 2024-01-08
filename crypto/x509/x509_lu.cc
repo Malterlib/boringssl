@@ -30,6 +30,10 @@
 
 using namespace bssl;
 
+// Index zero is the application data, which OpenSSL reserves and callers, as
+// Qt, use without allocating it.
+static ExDataClass g_ex_data_class(/*with_app_data=*/true);
+
 namespace {
 
 X509_LOOKUP *X509_LOOKUP_new(const X509_LOOKUP_METHOD *method,
@@ -271,7 +275,11 @@ int X509_LOOKUP_ctrl(X509_LOOKUP *ctx, int cmd, const char *argc, long argl,
 X509Store::X509Store()
     : RefCounted(CheckSubClass()),
       objs(sk_X509_OBJECT_new(x509_object_cmp_sk)),
-      param(X509_VERIFY_PARAM_new()) {}
+      param(X509_VERIFY_PARAM_new()) {
+  CRYPTO_new_ex_data(&ex_data);
+}
+
+X509Store::~X509Store() { CRYPTO_free_ex_data(&g_ex_data_class, &ex_data); }
 
 X509_STORE *X509_STORE_new() {
   UniquePtr<X509Store> ret(New<X509Store>());
@@ -291,6 +299,20 @@ X509_STORE *X509_STORE_dup_ref(const X509_STORE *store) {
     return nullptr;
   }
   return FromOpaque(store)->DupRefInternal();
+}
+
+int X509_STORE_get_ex_new_index(long argl, void *argp, CRYPTO_EX_unused *unused,
+                                CRYPTO_EX_dup *dup_unused,
+                                CRYPTO_EX_free *free_func) {
+  return CRYPTO_get_ex_new_index_ex(&g_ex_data_class, argl, argp, free_func);
+}
+
+int X509_STORE_set_ex_data(X509_STORE *vfy, int idx, void *arg) {
+  return CRYPTO_set_ex_data(&FromOpaque(vfy)->ex_data, idx, arg);
+}
+
+void *X509_STORE_get_ex_data(const X509_STORE *vfy, int idx) {
+  return CRYPTO_get_ex_data(&FromOpaque(vfy)->ex_data, idx);
 }
 
 void X509_STORE_free(X509_STORE *vfy) {

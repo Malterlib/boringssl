@@ -1679,6 +1679,38 @@ TEST_P(X509VerifyTest, CRLThreads) {
   // currently do not work correctly.
 }
 
+// The extra data of a store, at an index of the class of stores, is freed with
+// the store.
+TEST(X509Test, StoreExData) {
+  static int freed = 0;
+  int index = X509_STORE_get_ex_new_index(
+      0, nullptr, nullptr, nullptr,
+      [](void *parent, void *ptr, CRYPTO_EX_DATA *ad, int index, long argl,
+         void *argp) {
+        if (ptr != nullptr) {
+          freed++;
+          delete static_cast<int *>(ptr);
+        }
+      });
+  ASSERT_GE(index, 0);
+
+  UniquePtr<X509_STORE> store(X509_STORE_new());
+  ASSERT_TRUE(store);
+  // The application data, at index zero without allocating it, as Qt uses it,
+  // is kept apart from the allocated index
+  int app_data = 0;
+  ASSERT_TRUE(X509_STORE_set_ex_data(store.get(), 0, &app_data));
+  EXPECT_EQ(nullptr, X509_STORE_get_ex_data(store.get(), index));
+  int *data = new int(1);
+  ASSERT_TRUE(X509_STORE_set_ex_data(store.get(), index, data));
+  EXPECT_EQ(data, X509_STORE_get_ex_data(store.get(), index));
+  EXPECT_EQ(&app_data, X509_STORE_get_ex_data(store.get(), 0));
+
+  int freed_before = freed;
+  store.reset();
+  EXPECT_EQ(freed_before + 1, freed);
+}
+
 TEST(X509Test, StoreThreads) {
   UniquePtr<X509> root(CertFromPEM(kRootCAPEM));
   UniquePtr<X509> intermediate(CertFromPEM(kIntermediatePEM));
