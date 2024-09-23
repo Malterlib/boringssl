@@ -92,6 +92,7 @@ static bool os_supports_avx512(uint64_t xcr0) {
 #endif
 }
 
+#if 0
 // handle_cpu_env applies the value from `in` to the CPUID values in `out[0]`
 // and `out[1]`. See the comment in `OPENSSL_cpuid_setup` about this. The
 // `is_last` argument specifies whether the value is at the end of the string.
@@ -147,6 +148,7 @@ void bssl::OPENSSL_adjust_ia32cap(uint32_t cap[4], const char *env) {
     handle_cpu_env(cap + 2, env + 1, /*is_last=*/true);
   }
 }
+#endif
 
 void bssl::OPENSSL_cpuid_setup() {
   // Determine the vendor and maximum input value.
@@ -278,10 +280,12 @@ void bssl::OPENSSL_cpuid_setup() {
   OPENSSL_ia32cap_P[2] = extended_features[0];
   OPENSSL_ia32cap_P[3] = extended_features[1];
 
+#if 0
   const char *env = getenv("OPENSSL_ia32cap");
   if (env != nullptr) {
     OPENSSL_adjust_ia32cap(OPENSSL_ia32cap_P, env);
   }
+#endif
 }
 
 #endif  // !OPENSSL_NO_ASM && (OPENSSL_X86 || OPENSSL_X86_64)
