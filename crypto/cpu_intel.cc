@@ -278,10 +278,14 @@ void bssl::OPENSSL_cpuid_setup() {
   OPENSSL_ia32cap_P[2] = extended_features[0];
   OPENSSL_ia32cap_P[3] = extended_features[1];
 
+  // The environment doesn't override the capabilities, on any platform: this
+  // runs before the CRT is initialized on Windows, where getenv is unsafe.
+#if 0
   const char *env = getenv("OPENSSL_ia32cap");
   if (env != nullptr) {
     OPENSSL_adjust_ia32cap(OPENSSL_ia32cap_P, env);
   }
+#endif
 }
 
 #endif  // !OPENSSL_NO_ASM && (OPENSSL_X86 || OPENSSL_X86_64)
