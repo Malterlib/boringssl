@@ -27,7 +27,7 @@ namespace {
   struct CMalterlibLock : public CMutualManyRead {
     CMalterlibLock();
     ~CMalterlibLock();
-    
+
     DLinkDS_Link(CMalterlibLock, m_Link);
   };
 
@@ -62,7 +62,7 @@ namespace {
       }
 #endif
     }
-    
+
     void f_ForkedParent() override {
 #ifndef DMibSanitizerEnabled_Thread
       for (auto &Mutex : m_Mutexes) {
@@ -73,7 +73,7 @@ namespace {
       m_Lock.f_ForkedParent();
       m_Lock.f_Unlock();
     }
-    
+
     void f_ForkedChild() override {
 #ifndef DMibSanitizerEnabled_Thread
       for (auto &Mutex : m_Mutexes) {
@@ -97,17 +97,17 @@ namespace {
     ~CSubSystem_BoringSSL() {
       DMibRequire(m_CleanupFunctions.f_IsEmpty());
     }
-    
+
     struct CCleanupEntry {
       void (*m_fCleanup)(void *);
       void *m_pContext;
     };
-    
+
     CMutual m_Lock;
     DLinkDS_List(CMalterlibLock, m_Link) m_Mutexes;
     TCVector<CCleanupEntry> m_CleanupFunctions;
   };
-  
+
   constinit TCSubSystem<CSubSystem_BoringSSL, ESubSystemDestruction_BeforeMemoryManager>
     g_SubSystem_BoringSSL = {DAggregateInit};
 
@@ -116,7 +116,7 @@ namespace {
     DLock(SubSystem.m_Lock);
     SubSystem.m_Mutexes.f_Insert(this);
   }
-  
+
   CMalterlibLock::~CMalterlibLock() {
     auto &SubSystem = *g_SubSystem_BoringSSL;
     DLock(SubSystem.m_Lock);
@@ -177,7 +177,7 @@ static_assert(alignof(CRYPTO_once_t) >= alignof(CInitOnce), "Incorrect size");
 
 void CRYPTO_once(CRYPTO_once_t *once, void (*init)(void)) {
   CInitOnce *pInit = fg_AutoReinterpretCast(once);
-  if (pInit->m_bInited.f_Load(EMemoryOrder_Acquire))
+  if (pInit->m_bInited.f_Load(gc_MemoryOrder_Acquire))
     return;
 
   DLock(pInit->m_Lock);
