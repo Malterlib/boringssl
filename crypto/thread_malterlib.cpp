@@ -156,7 +156,7 @@ struct CStaticSupportingLock
       m_Union.m_Lock.f_Destruct();
   }
 
-  mint m_ActiveUnion = 0;
+  umint m_ActiveUnion = 0;
   union
   {
     TCAggregate<CMalterlibLock, 125, CLowLevelLockAggregate> m_Aggregate;
@@ -244,7 +244,7 @@ struct COpenSSLThreadLocals {
   thread_local_destructor_t m_Destructors[NUM_OPENSSL_THREAD_LOCALS] = {0};
 
   ~COpenSSLThreadLocals() {
-    for (mint i = 0; i < NUM_OPENSSL_THREAD_LOCALS; ++i) {
+    for (umint i = 0; i < NUM_OPENSSL_THREAD_LOCALS; ++i) {
       if (m_Pointers[i] && m_Destructors[i])
         m_Destructors[i](m_Pointers[i]);
     }
