@@ -167,7 +167,7 @@ static void fiat_p256_point_double(fiat_p256_felem x_out, fiat_p256_felem y_out,
                                    const fiat_p256_felem x_in,
                                    const fiat_p256_felem y_in,
                                    const fiat_p256_felem z_in) {
-  uint8_t out[3*32], in[3*32];
+  alignas(br_word_t) uint8_t out[3 * 32], in[3 * 32];
   static_assert(sizeof(fiat_p256_felem) == 32);
   OPENSSL_memcpy(&in[0], x_in, 32);
   OPENSSL_memcpy(&in[32], y_in, 32);
@@ -185,7 +185,7 @@ static void fiat_p256_point_add(fiat_p256_felem x3, fiat_p256_felem y3,
                                 const fiat_p256_felem x2,
                                 const fiat_p256_felem y2,
                                 const fiat_p256_felem z2) {
-  uint8_t out[3 * 32], in1[3 * 32], in2[3 * 32];
+  alignas(br_word_t) uint8_t out[3 * 32], in1[3 * 32], in2[3 * 32];
   static_assert(sizeof(fiat_p256_felem) == 32);
   OPENSSL_memcpy(&in1[0], x1, 32);
   OPENSSL_memcpy(&in1[32], y1, 32);
