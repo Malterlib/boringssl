@@ -654,12 +654,27 @@ typedef pthread_rwlock_t CRYPTO_MUTEX;
 #define CRYPTO_MUTEX_INIT PTHREAD_RWLOCK_INITIALIZER
 #elif defined(OPENSSL_MALTERLIB_THREADS)
 typedef struct crypto_mutex_st {
-  size_t data
+  // Storage for the Malterlib lock placed here by crypto/thread_malterlib.cpp,
+  // sized exactly per architecture and configuration (asserted there). Explicit
+  // width and 8-byte alignment because the lock contains 64-bit atomics on all
+  // architectures, including 32-bit ones where size_t is 4 bytes.
+#if defined(_MSC_VER) && !defined(__clang__)
+  __declspec(align(8)) unsigned char data
+#else
+  __attribute__((aligned(8))) unsigned char data
+#endif
   [
-    16
+#if defined(OPENSSL_64_BIT)
+    136
 #   if DMibEnableSafeCheck > 0
-      + 5
+      + 40
 #   endif
+#else
+    104
+#   if DMibEnableSafeCheck > 0
+      + 16
+#   endif
+#endif
   ];
 } CRYPTO_MUTEX;
 #define CRYPTO_MUTEX_INIT { 0 }
