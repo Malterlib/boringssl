@@ -1005,6 +1005,430 @@ int SSL_write(SSL *ssl, const void *buf, int num) {
   return ret <= 0 ? ret : static_cast<int>(bytes_written);
 }
 
+
+// ssl_zero_copy_ready returns whether `ssl` is in the steady state the fragment
+// entry points require.
+static bool ssl_zero_copy_ready(SSLImpl *ssl) {
+  if (ssl->do_handshake == nullptr) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_UNINITIALIZED);
+    return false;
+  }
+  if (SSL_is_dtls(ssl) || SSL_is_quic(ssl)) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
+    return false;
+  }
+  if (SSL_in_init(ssl) || !ssl_can_read(ssl) || !ssl_can_write(ssl)) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_HANDSHAKE_NOT_COMPLETE);
+    return false;
+  }
+  if (ssl->s3->renegotiate_pending) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_NO_RENEGOTIATION);
+    return false;
+  }
+  return true;
+}
+
+// ssl_zero_copy_write_open checks for shutdown, which `ssl_can_write` does
+// not cover. Application data must not follow close_notify or a fatal alert.
+static bool ssl_zero_copy_write_open(SSLImpl *ssl) {
+  if (ssl->s3->write_shutdown != ssl_shutdown_none) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_PROTOCOL_IS_SHUTDOWN);
+    return false;
+  }
+  return true;
+}
+
+enum ssl_seal_v_result_t SSL_seal_app_datav(SSL *ssl, uint8_t *out,
+                                           size_t *out_len, size_t max_out,
+                                           const CRYPTO_IVEC *in,
+                                           size_t num_in,
+                                           size_t *out_consumed) {
+  auto *ssl_impl = FromOpaque(ssl);
+  ssl_reset_error_state(ssl_impl);
+  *out_len = 0;
+  *out_consumed = 0;
+
+  // Refusal must precede any write-state change so `SSL_write` can retry.
+  if (!ssl_zero_copy_ready(ssl_impl) || !ssl_zero_copy_write_open(ssl_impl)) {
+    return ssl_seal_v_refused;
+  }
+  // Buffered records must leave first to preserve record sequence order.
+  if (ssl_impl->s3->write_buffer.size() > 0 ||
+      !ssl_impl->s3->pending_write.empty() ||
+      ssl_impl->s3->unreported_bytes_written != 0) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_BAD_WRITE_RETRY);
+    return ssl_seal_v_refused;
+  }
+  // Record splitting is defined around the first plaintext byte, which a
+  // gathered plaintext would have to be taken apart to supply.
+  if (ssl_needs_record_splitting(ssl_impl)) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
+    return ssl_seal_v_refused;
+  }
+
+  size_t written = 0;
+
+  // Flush post-handshake output before application data, as `do_tls_write`
+  // does. From here, failure may advance write state and must be fatal.
+  if (!tls_flush_pending_hs_data(ssl_impl)) {
+    return ssl_seal_v_error;
+  }
+  if (ssl_impl->s3->pending_flight != nullptr) {
+    Span<const uint8_t> flight(
+        reinterpret_cast<const uint8_t *>(ssl_impl->s3->pending_flight->data),
+        ssl_impl->s3->pending_flight->length);
+    flight = flight.subspan(ssl_impl->s3->pending_flight_offset);
+    // The flight stays buffered for a retry with more room or for `SSL_write`,
+    // which flushes it the same way; nothing has been lost.
+    if (max_out < flight.size()) {
+      return ssl_seal_v_refused;
+    }
+    OPENSSL_memcpy(out, flight.data(), flight.size());
+    ssl_impl->s3->pending_flight.reset();
+    ssl_impl->s3->pending_flight_offset = 0;
+    written += flight.size();
+  }
+
+  // Allow further KeyUpdate acknowledgements after making write progress.
+  ssl_impl->s3->key_update_pending = false;
+
+  Span<const CRYPTO_IVEC> input(in, num_in);
+  const size_t in_total = ssl_fragments_len(input);
+  size_t consumed = 0;
+
+  size_t frag_index = 0, frag_offset = 0;
+
+  while (consumed < in_total) {
+    const size_t room = max_out - written;
+    const size_t overhead = SSL_max_seal_overhead(ssl_impl);
+    if (room <= overhead) {
+      break;
+    }
+
+    size_t to_write = std::min(in_total - consumed, room - overhead);
+    to_write = std::min(to_write, size_t{ssl_impl->max_send_fragment});
+
+    // End the record at the fragment limit to avoid copying plaintext. Empty
+    // fragments must not consume the budget.
+    CRYPTO_IVEC storage[kMaxSealFragments];
+    size_t num_frags = 0, record_len = 0;
+    size_t i = frag_index, off = frag_offset;
+    while (i < num_in && record_len < to_write &&
+           num_frags < kMaxSealFragments) {
+      const size_t avail = input[i].len - off;
+      if (avail == 0) {
+        i++;
+        off = 0;
+        continue;
+      }
+      const size_t todo = std::min(avail, to_write - record_len);
+      storage[num_frags].in = input[i].in + off;
+      storage[num_frags].len = todo;
+      num_frags++;
+      record_len += todo;
+      off += todo;
+      if (off == input[i].len) {
+        i++;
+        off = 0;
+      }
+    }
+    if (record_len == 0) {
+      break;
+    }
+
+    size_t record_written;
+    if (!tls_seal_record_v(ssl_impl, out + written, &record_written, room,
+                           SSL3_RT_APPLICATION_DATA,
+                           Span(storage, num_frags))) {
+      // Report prior progress: those record sequence numbers cannot be reused.
+      *out_len = written;
+      *out_consumed = consumed;
+      return ssl_seal_v_error;
+    }
+    written += record_written;
+    consumed += record_len;
+    frag_index = i;
+    frag_offset = off;
+  }
+
+  *out_len = written;
+  *out_consumed = consumed;
+  return ssl_seal_v_success;
+}
+
+enum ssl_open_v_result_t SSL_open_app_datav(SSL *ssl, const CRYPTO_IOVEC *out,
+                                            size_t num_out, size_t *out_len,
+                                            size_t *out_consumed,
+                                            const CRYPTO_IVEC *in,
+                                            size_t num_in) {
+  auto *ssl_impl = FromOpaque(ssl);
+  ssl_reset_error_state(ssl_impl);
+  *out_len = 0;
+  *out_consumed = 0;
+
+  // Preserve a prior fatal read error; it must not become a retryable refusal.
+  if (!check_read_error(ssl_impl)) {
+    return ssl_open_v_error;
+  }
+  // A received close_notify ends the stream whatever the input holds, as it
+  // does for `SSL_read`.
+  if (ssl_impl->s3->read_shutdown == ssl_shutdown_close_notify) {
+    return ssl_open_v_close_notify;
+  }
+  if (!ssl_zero_copy_ready(ssl_impl)) {
+    return ssl_open_v_refused;
+  }
+  // `SSL_read` buffers plaintext of its own; mixing the two would reorder it.
+  if (!ssl_impl->s3->pending_app_data.empty()) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
+    return ssl_open_v_refused;
+  }
+  // A buffered partial record must finish through `SSL_read` before this path
+  // can consume later ciphertext.
+  if (!ssl_impl->s3->read_buffer.empty()) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
+    return ssl_open_v_refused;
+  }
+
+  // Slicing below uses fixed storage, and a slice never has more entries than
+  // the list it came from.
+  if (num_in > CRYPTO_IOVEC_MAX || num_out > CRYPTO_IOVEC_MAX) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
+    return ssl_open_v_refused;
+  }
+
+  Span<const CRYPTO_IVEC> input(in, num_in);
+  Span<const CRYPTO_IOVEC> output(out, num_out);
+  const size_t in_total = ssl_fragments_len(input);
+  const size_t out_total = ssl_fragments_len(output);
+  size_t consumed = 0, produced = 0;
+
+  // Output may overlap input only as one buffer starting at or before the
+  // first record body and reaching the end of the input. Each record is then
+  // opened where its ciphertext lies, which the AEAD permits and which the
+  // output therefore covers, and the plaintext moved down to where the output
+  // stands. Any other overlap would hand the AEAD a shifted alias or write
+  // outside the output.
+  bool in_place = false;
+  for (const CRYPTO_IVEC &in_frag : input) {
+    for (const CRYPTO_IOVEC &out_frag : output) {
+      if (!buffers_alias(in_frag.in, in_frag.len, out_frag.out, out_frag.len)) {
+        continue;
+      }
+      if (num_in != 1 || num_out != 1 ||
+          out_frag.out > in_frag.in + SSL3_RT_HEADER_LENGTH ||
+          out_frag.out + out_frag.len < in_frag.in + in_frag.len) {
+        OPENSSL_PUT_ERROR(SSL, SSL_R_OUTPUT_ALIASES_INPUT);
+        return ssl_open_v_refused;
+      }
+      in_place = true;
+    }
+  }
+
+  // Capture every exit so reported progress includes all advanced sequence
+  // numbers, even when a later record fails.
+  const enum ssl_open_v_result_t result = [&]() -> enum ssl_open_v_result_t {
+  for (;;) {
+    if (in_total - consumed < SSL3_RT_HEADER_LENGTH) {
+      break;
+    }
+
+    // Peek at the record length so a record that cannot fit the remaining
+    // output stops the loop rather than failing to decrypt.
+    CRYPTO_IVEC in_storage[CRYPTO_IOVEC_MAX];
+    Span<const CRYPTO_IVEC> rest_in;
+    if (!ssl_fragments_slice(&rest_in, Span(in_storage), input, consumed,
+                             in_total - consumed)) {
+      OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+      return ssl_open_v_error;
+    }
+    uint8_t header[SSL3_RT_HEADER_LENGTH];
+    if (!ssl_fragments_copy_in(Span(header), rest_in)) {
+      break;
+    }
+    const size_t body_len = (size_t{header[3]} << 8) | header[4];
+    // Reject oversized lengths before waiting for their bodies. Keep this limit
+    // in sync with `tls_open_record`.
+    if (body_len > SSL3_RT_MAX_ENCRYPTED_LENGTH) {
+      OPENSSL_PUT_ERROR(SSL, SSL_R_ENCRYPTED_LENGTH_TOO_LONG);
+      ssl_send_alert(ssl_impl, SSL3_AL_FATAL, SSL_AD_RECORD_OVERFLOW);
+      return ssl_open_v_error;
+    }
+    if (in_total - consumed < SSL3_RT_HEADER_LENGTH + body_len) {
+      break;  // The record is not complete yet.
+    }
+    const size_t plaintext_len =
+        ssl_impl->s3->aead_read_ctx->OpenPlaintextLen(body_len);
+    if (out_total - produced < plaintext_len) {
+      break;  // No room to decrypt into. The caller drains and comes back.
+    }
+
+    CRYPTO_IOVEC out_storage[CRYPTO_IOVEC_MAX];
+    Span<const CRYPTO_IOVEC> rest_out;
+    uint8_t *in_place_out = nullptr;
+    if (in_place) {
+      // The AEAD pairs output with the body after the explicit nonce, so that
+      // is where an exact alias starts.
+      const size_t nonce_len = ssl_impl->s3->aead_read_ctx->ExplicitNonceLen();
+      in_place_out = const_cast<uint8_t *>(input[0].in) + consumed +
+                     SSL3_RT_HEADER_LENGTH + nonce_len;
+      out_storage[0].out = in_place_out;
+      out_storage[0].in = nullptr;
+      out_storage[0].len = body_len > nonce_len ? body_len - nonce_len : 0;
+      rest_out = Span(out_storage, 1);
+    } else if (!ssl_fragments_slice_out(&rest_out, Span(out_storage), output,
+                                        produced, out_total - produced)) {
+      OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+      return ssl_open_v_error;
+    }
+
+    // Conservatively bound the merged AEAD vectors before opening. After prior
+    // progress, stop here so the next call can refuse without consuming input.
+    CRYPTO_IVEC body_storage[CRYPTO_IOVEC_MAX];
+    Span<const CRYPTO_IVEC> body_in;
+    CRYPTO_IOVEC plain_storage[CRYPTO_IOVEC_MAX];
+    Span<const CRYPTO_IOVEC> plain_out = rest_out;
+    if (!ssl_fragments_slice(&body_in, Span(body_storage), input,
+                             consumed + SSL3_RT_HEADER_LENGTH, body_len) ||
+        (!in_place &&
+         !ssl_fragments_slice_out(&plain_out, Span(plain_storage), output,
+                                  produced, plaintext_len))) {
+      OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+      return ssl_open_v_error;
+    }
+    if (body_in.size() + plain_out.size() > CRYPTO_IOVEC_MAX + 1) {
+      if (consumed == 0 && produced == 0) {
+        return ssl_open_v_refused;
+      }
+      break;
+    }
+
+    uint8_t type = 0, alert = SSL_AD_DECODE_ERROR;
+    size_t record_len = 0, record_consumed = 0;
+    const uint64_t read_sequence = ssl_impl->s3->read_sequence;
+    auto ret = tls_open_record_v(ssl_impl, &type, &record_len, &record_consumed,
+                                 &alert, rest_in, rest_out);
+    switch (ret) {
+      case ssl_open_record_partial:
+        // The header parsed above says otherwise, so this cannot happen.
+        OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+        return ssl_open_v_error;
+
+      case ssl_open_record_discard:
+        consumed += record_consumed;
+        continue;
+
+      case ssl_open_record_close_notify:
+        return ssl_open_v_close_notify;
+
+      case ssl_open_record_error:
+        // Count records rejected after authentication, which advanced the
+        // sequence; failed authentication consumes nothing.
+        if (ssl_impl->s3->read_sequence != read_sequence) {
+          consumed += record_consumed;
+        }
+        if (alert != 0) {
+          ssl_send_alert(ssl_impl, SSL3_AL_FATAL, alert);
+        }
+        return ssl_open_v_error;
+
+      case ssl_open_record_success:
+        break;
+    }
+
+    consumed += record_consumed;
+
+    if (type == SSL3_RT_APPLICATION_DATA) {
+      if (in_place_out != nullptr && output[0].out + produced != in_place_out) {
+        OPENSSL_memmove(output[0].out + produced, in_place_out, record_len);
+      }
+      produced += record_len;
+      // The KeyUpdate limit counts consecutive updates without application
+      // data, not all updates over the connection lifetime. An empty record
+      // carries none, as `SSL_read` also holds.
+      if (record_len != 0) {
+        ssl_impl->s3->key_update_count = 0;
+      }
+      continue;
+    }
+
+    // Handshake and alert handlers require contiguous plaintext. Do not expose
+    // these records as application data.
+    Array<uint8_t> plaintext;
+    if (!plaintext.InitForOverwrite(record_len) ||
+        !ssl_fragments_copy_out(Span(plaintext), rest_out)) {
+      OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+      return ssl_open_v_error;
+    }
+
+    if (type == SSL3_RT_ALERT) {
+      uint8_t alert_ret = SSL_AD_DECODE_ERROR;
+      auto alert_result = ssl_process_alert(ssl_impl, &alert_ret,
+                                            Span<const uint8_t>(plaintext));
+      if (alert_result == ssl_open_record_close_notify) {
+        return ssl_open_v_close_notify;
+      }
+      if (alert_result == ssl_open_record_error) {
+        if (alert_ret != 0) {
+          ssl_send_alert(ssl_impl, SSL3_AL_FATAL, alert_ret);
+        }
+        return ssl_open_v_error;
+      }
+      continue;
+    }
+
+    if (type != SSL3_RT_HANDSHAKE) {
+      OPENSSL_PUT_ERROR(SSL, SSL_R_UNEXPECTED_RECORD);
+      ssl_send_alert(ssl_impl, SSL3_AL_FATAL, SSL_AD_UNEXPECTED_MESSAGE);
+      return ssl_open_v_error;
+    }
+
+    if (!tls_append_handshake_data(ssl_impl, Span<const uint8_t>(plaintext))) {
+      ssl_send_alert(ssl_impl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
+      return ssl_open_v_error;
+    }
+
+    // Post-handshake replies must precede the next application record.
+    for (;;) {
+      SSLMessage msg;
+      if (!ssl_impl->method->get_message(ssl_impl, &msg)) {
+        break;
+      }
+      if (!ssl_do_post_handshake(ssl_impl, msg)) {
+        ssl_set_read_error(ssl_impl);
+        return ssl_open_v_error;
+      }
+      ssl_impl->method->next_message(ssl_impl);
+    }
+    // Validate partial handshake lengths now; no further record may arrive to
+    // trigger the record-layer check.
+    uint8_t accept_alert = SSL_AD_DECODE_ERROR;
+    if (!tls_can_accept_handshake_data(ssl_impl, &accept_alert)) {
+      ssl_send_alert(ssl_impl, SSL3_AL_FATAL, accept_alert);
+      return ssl_open_v_error;
+    }
+    if (SSL_in_init(ssl_impl) || ssl_impl->s3->renegotiate_pending) {
+      // A new handshake, or a HelloRequest left for the caller to answer,
+      // requires `SSL_read`. Return prior progress; later fragment calls
+      // refuse until it is dealt with.
+      return ssl_open_v_success;
+    }
+  }
+
+  return ssl_open_v_success;
+  }();
+
+  // Latch fatal read errors as `ssl_open_app_data` does. Handshake failures
+  // are handled by the handshake path.
+  if (result == ssl_open_v_error && !SSL_in_init(ssl_impl)) {
+    ssl_set_read_error(ssl_impl);
+  }
+
+  *out_len = produced;
+  *out_consumed = consumed;
+  return result;
+}
+
 int SSL_key_update(SSL *ssl, int request_type) {
   auto *ssl_impl = FromOpaque(ssl);
   ssl_reset_error_state(ssl_impl);
