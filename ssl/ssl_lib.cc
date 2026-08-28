@@ -1005,6 +1005,432 @@ int SSL_write(SSL *ssl, const void *buf, int num) {
   return ret <= 0 ? ret : static_cast<int>(bytes_written);
 }
 
+// Zero-copy application data.
+//
+// These entry points let a caller keep the record buffers. The plaintext is
+// gathered from, and the ciphertext scattered to, fragment lists the caller
+// owns, so nothing is copied between the caller and the record layer. They are
+// deliberately narrow: they run only in the post-handshake steady state and
+// refuse otherwise, leaving `SSL_write` and `SSL_read` as the general path.
+
+// ssl_zero_copy_ready returns whether `ssl` is in the steady state the fragment
+// entry points require.
+static bool ssl_zero_copy_ready(SSLImpl *ssl) {
+  if (ssl->do_handshake == nullptr) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_UNINITIALIZED);
+    return false;
+  }
+  if (SSL_is_dtls(ssl) || SSL_is_quic(ssl)) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
+    return false;
+  }
+  if (SSL_in_init(ssl) || !ssl_can_read(ssl) || !ssl_can_write(ssl)) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_HANDSHAKE_NOT_COMPLETE);
+    return false;
+  }
+  if (ssl->s3->renegotiate_pending) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_NO_RENEGOTIATION);
+    return false;
+  }
+  return true;
+}
+
+// Whether the write side is still open. `ssl_can_write` does not cover this;
+// `tls_write_app_data` checks it separately, and sealing past a close_notify or
+// a fatal alert would put application data on the wire after it.
+static bool ssl_zero_copy_write_open(SSLImpl *ssl) {
+  if (ssl->s3->write_shutdown != ssl_shutdown_none) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_PROTOCOL_IS_SHUTDOWN);
+    return false;
+  }
+  return true;
+}
+
+enum ssl_seal_v_result_t SSL_seal_app_datav(SSL *ssl, uint8_t *out,
+                                           size_t *out_len, size_t max_out,
+                                           const CRYPTO_IVEC *in,
+                                           size_t num_in,
+                                           size_t *out_consumed) {
+  auto *ssl_impl = FromOpaque(ssl);
+  ssl_reset_error_state(ssl_impl);
+  *out_len = 0;
+  *out_consumed = 0;
+
+  // Everything from here to `tls_flush_pending_hs_data` leaves the connection
+  // exactly as it found it, which is what lets these say "refused" rather than
+  // "failed": the caller may still write the same plaintext by another route.
+  if (!ssl_zero_copy_ready(ssl_impl) || !ssl_zero_copy_write_open(ssl_impl)) {
+    return ssl_seal_v_refused;
+  }
+  // The library must not be holding ciphertext of its own: records are numbered
+  // in the order they are sealed, so anything already queued has to go out
+  // first or the peer sees them out of order.
+  if (ssl_impl->s3->write_buffer.size() > 0 ||
+      !ssl_impl->s3->pending_write.empty() ||
+      ssl_impl->s3->unreported_bytes_written != 0) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_BAD_WRITE_RETRY);
+    return ssl_seal_v_refused;
+  }
+  // Record splitting is defined around the first plaintext byte, which a
+  // gathered plaintext would have to be taken apart to supply.
+  if (ssl_needs_record_splitting(ssl_impl)) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
+    return ssl_seal_v_refused;
+  }
+
+  size_t written = 0;
+
+  // Post-handshake output goes ahead of the application data, exactly as
+  // `do_tls_write` places it. This is a NewSessionTicket, a KeyUpdate
+  // acknowledgement, or a 0-RTT key change.
+  // Past this point the write state can move, so a failure is the connection
+  // ending rather than something the caller can retry elsewhere.
+  if (!tls_flush_pending_hs_data(ssl_impl)) {
+    return ssl_seal_v_error;
+  }
+  if (ssl_impl->s3->pending_flight != nullptr) {
+    Span<const uint8_t> flight(
+        reinterpret_cast<const uint8_t *>(ssl_impl->s3->pending_flight->data),
+        ssl_impl->s3->pending_flight->length);
+    flight = flight.subspan(ssl_impl->s3->pending_flight_offset);
+    if (max_out < flight.size()) {
+      OPENSSL_PUT_ERROR(SSL, SSL_R_BUFFER_TOO_SMALL);
+      return ssl_seal_v_error;
+    }
+    OPENSSL_memcpy(out, flight.data(), flight.size());
+    ssl_impl->s3->pending_flight.reset();
+    ssl_impl->s3->pending_flight_offset = 0;
+    written += flight.size();
+  }
+
+  // Now that the connection has made progress, uncork KeyUpdate
+  // acknowledgements, as `do_tls_write` does.
+  ssl_impl->s3->key_update_pending = false;
+
+  Span<const CRYPTO_IVEC> input(in, num_in);
+  const size_t in_total = ssl_fragments_len(input);
+  size_t consumed = 0;
+
+  // A cursor into the caller's fragments. The list may be longer than a record
+  // can be assembled from, so it is walked rather than sliced.
+  size_t frag_index = 0, frag_offset = 0;
+
+  while (consumed < in_total) {
+    const size_t room = max_out - written;
+    const size_t overhead = SSL_max_seal_overhead(ssl_impl);
+    if (room <= overhead) {
+      break;
+    }
+
+    size_t to_write = std::min(in_total - consumed, room - overhead);
+    to_write = std::min(to_write, size_t{ssl_impl->max_send_fragment});
+
+    // Take whole fragments up to the record's share of the fragment budget.
+    // When the budget runs out first the record is closed short rather than
+    // copying the remainder together: a partly filled record costs a few bytes
+    // of framing, where copying would cost a pass over the payload. Empty
+    // fragments are skipped so they cannot spend the budget.
+    CRYPTO_IVEC storage[kMaxSealFragments];
+    size_t num_frags = 0, record_len = 0;
+    size_t i = frag_index, off = frag_offset;
+    while (i < num_in && record_len < to_write &&
+           num_frags < kMaxSealFragments) {
+      const size_t avail = input[i].len - off;
+      if (avail == 0) {
+        i++;
+        off = 0;
+        continue;
+      }
+      const size_t todo = std::min(avail, to_write - record_len);
+      storage[num_frags].in = input[i].in + off;
+      storage[num_frags].len = todo;
+      num_frags++;
+      record_len += todo;
+      off += todo;
+      if (off == input[i].len) {
+        i++;
+        off = 0;
+      }
+    }
+    if (record_len == 0) {
+      break;
+    }
+
+    size_t record_written;
+    if (!tls_seal_record_v(ssl_impl, out + written, &record_written, room,
+                           SSL3_RT_APPLICATION_DATA,
+                           Span(storage, num_frags))) {
+      // Records sealed before this one cannot be produced again, so they are
+      // reported even though the call failed: the caller has to send them or
+      // give up the connection, and it must not seal them a second time.
+      *out_len = written;
+      *out_consumed = consumed;
+      return ssl_seal_v_error;
+    }
+    written += record_written;
+    consumed += record_len;
+    frag_index = i;
+    frag_offset = off;
+  }
+
+  *out_len = written;
+  *out_consumed = consumed;
+  return ssl_seal_v_success;
+}
+
+enum ssl_open_v_result_t SSL_open_app_datav(SSL *ssl, const CRYPTO_IOVEC *out,
+                                            size_t num_out, size_t *out_len,
+                                            size_t *out_consumed,
+                                            const CRYPTO_IVEC *in,
+                                            size_t num_in) {
+  auto *ssl_impl = FromOpaque(ssl);
+  ssl_reset_error_state(ssl_impl);
+  *out_len = 0;
+  *out_consumed = 0;
+
+  // A read error is the connection already having failed, which is not
+  // something another route could do better, so it stays an error. Everything
+  // else here leaves the connection exactly as it found it: nothing was read
+  // and no state moved, so the caller may use `SSL_read` for the same data.
+  if (!check_read_error(ssl_impl)) {
+    return ssl_open_v_error;
+  }
+  if (!ssl_zero_copy_ready(ssl_impl)) {
+    return ssl_open_v_refused;
+  }
+  // `SSL_read` buffers plaintext of its own; mixing the two would reorder it.
+  if (!ssl_impl->s3->pending_app_data.empty()) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
+    return ssl_open_v_refused;
+  }
+  // `SSL_read` may also hold the start of a record it could not finish: the
+  // bytes that follow continue that record rather than begin a new one, so
+  // they go back through `SSL_read` until it is whole.
+  if (!ssl_impl->s3->read_buffer.empty()) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
+    return ssl_open_v_refused;
+  }
+
+  // Slicing below uses fixed storage, and a slice never has more entries than
+  // the list it came from.
+  if (num_in > CRYPTO_IOVEC_MAX || num_out > CRYPTO_IOVEC_MAX) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
+    return ssl_open_v_refused;
+  }
+
+  Span<const CRYPTO_IVEC> input(in, num_in);
+  Span<const CRYPTO_IOVEC> output(out, num_out);
+  const size_t in_total = ssl_fragments_len(input);
+  const size_t out_total = ssl_fragments_len(output);
+  size_t consumed = 0, produced = 0;
+
+  // The loop reports through `consumed` and `produced` and its result is taken
+  // below, so no exit from it can claim less than the read sequence has already
+  // moved over. Records opened before a failure are the caller's to deal with:
+  // they cannot be opened again by any other route.
+  const enum ssl_open_v_result_t result = [&]() -> enum ssl_open_v_result_t {
+  for (;;) {
+    if (in_total - consumed < SSL3_RT_HEADER_LENGTH) {
+      break;
+    }
+
+    // Peek at the record length so a record that cannot fit the remaining
+    // output stops the loop rather than failing to decrypt.
+    CRYPTO_IVEC in_storage[CRYPTO_IOVEC_MAX];
+    Span<const CRYPTO_IVEC> rest_in;
+    if (!ssl_fragments_slice(&rest_in, Span(in_storage), input, consumed,
+                             in_total - consumed)) {
+      OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+      return ssl_open_v_error;
+    }
+    uint8_t header[SSL3_RT_HEADER_LENGTH];
+    if (!ssl_fragments_copy_in(Span(header), rest_in)) {
+      break;
+    }
+    const size_t body_len = (size_t{header[3]} << 8) | header[4];
+    // A length the record layer would reject must be rejected here too, or the
+    // loop waits for a record that can never arrive and no error is ever
+    // reported. `tls_open_record` makes the same check; keep them together.
+    if (body_len > SSL3_RT_MAX_ENCRYPTED_LENGTH) {
+      OPENSSL_PUT_ERROR(SSL, SSL_R_ENCRYPTED_LENGTH_TOO_LONG);
+      ssl_send_alert(ssl_impl, SSL3_AL_FATAL, SSL_AD_RECORD_OVERFLOW);
+      return ssl_open_v_error;
+    }
+    if (in_total - consumed < SSL3_RT_HEADER_LENGTH + body_len) {
+      break;  // The record is not complete yet.
+    }
+    // How much plaintext this record will produce, so a destination sized to the
+    // plaintext is enough and only a genuinely full one stops the loop
+    const size_t plaintext_len =
+        ssl_impl->s3->aead_read_ctx->OpenPlaintextLen(body_len);
+    if (out_total - produced < plaintext_len) {
+      break;  // No room to decrypt into. The caller drains and comes back.
+    }
+
+    CRYPTO_IOVEC out_storage[CRYPTO_IOVEC_MAX];
+    Span<const CRYPTO_IOVEC> rest_out;
+    if (!ssl_fragments_slice_out(&rest_out, Span(out_storage), output, produced,
+                                 out_total - produced)) {
+      OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+      return ssl_open_v_error;
+    }
+
+    // Paired at the union of their boundaries, the record's ciphertext and its
+    // destination can need more vectors than the AEAD takes. Counted before the
+    // record is opened, and conservatively, with a boundary on both sides
+    // counted twice. The first record of a call is refused with nothing
+    // consumed, so the caller opens it another way; a later one ends the call
+    // with what was opened, and the next call is the one refused.
+    CRYPTO_IVEC body_storage[CRYPTO_IOVEC_MAX];
+    Span<const CRYPTO_IVEC> body_in;
+    CRYPTO_IOVEC plain_storage[CRYPTO_IOVEC_MAX];
+    Span<const CRYPTO_IOVEC> plain_out;
+    if (!ssl_fragments_slice(&body_in, Span(body_storage), input,
+                             consumed + SSL3_RT_HEADER_LENGTH, body_len) ||
+        !ssl_fragments_slice_out(&plain_out, Span(plain_storage), output,
+                                 produced, plaintext_len)) {
+      OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+      return ssl_open_v_error;
+    }
+    if (body_in.size() + plain_out.size() > CRYPTO_IOVEC_MAX + 1) {
+      if (consumed == 0 && produced == 0) {
+        return ssl_open_v_refused;
+      }
+      break;
+    }
+
+    uint8_t type = 0, alert = SSL_AD_DECODE_ERROR;
+    size_t record_len = 0, record_consumed = 0;
+    const uint64_t read_sequence = ssl_impl->s3->read_sequence;
+    auto ret = tls_open_record_v(ssl_impl, &type, &record_len, &record_consumed,
+                                 &alert, rest_in, rest_out);
+    switch (ret) {
+      case ssl_open_record_partial:
+        // The header parsed above says otherwise, so this cannot happen.
+        OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+        return ssl_open_v_error;
+
+      case ssl_open_record_discard:
+        consumed += record_consumed;
+        continue;
+
+      case ssl_open_record_close_notify:
+        return ssl_open_v_close_notify;
+
+      case ssl_open_record_error:
+        // A record that failed to authenticate left the read sequence where it
+        // was and is not counted. One that authenticated and was then rejected
+        // advanced it, so what the record layer took is reported and the caller
+        // retires it.
+        if (ssl_impl->s3->read_sequence != read_sequence) {
+          consumed += record_consumed;
+        }
+        if (alert != 0) {
+          ssl_send_alert(ssl_impl, SSL3_AL_FATAL, alert);
+        }
+        return ssl_open_v_error;
+
+      case ssl_open_record_success:
+        break;
+    }
+
+    consumed += record_consumed;
+
+    if (type == SSL3_RT_APPLICATION_DATA) {
+      produced += record_len;
+      // The limit is on KeyUpdates with no application data between them, which
+      // is what `ssl_read_impl` expresses by resetting here. Without this the
+      // budget is a lifetime one and a peer that rekeys periodically is
+      // eventually disconnected for it.
+      ssl_impl->s3->key_update_count = 0;
+      continue;
+    }
+
+    // Anything else has to reach the library as one span, so it is taken back
+    // out of the caller's fragments and the output rewound over it. These
+    // records are rare and small next to application data.
+    Array<uint8_t> plaintext;
+    if (!plaintext.InitForOverwrite(record_len) ||
+        !ssl_fragments_copy_out(Span(plaintext), rest_out)) {
+      OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+      return ssl_open_v_error;
+    }
+
+    if (type == SSL3_RT_ALERT) {
+      uint8_t alert_ret = SSL_AD_DECODE_ERROR;
+      auto alert_result = ssl_process_alert(ssl_impl, &alert_ret,
+                                            Span<const uint8_t>(plaintext));
+      if (alert_result == ssl_open_record_close_notify) {
+        return ssl_open_v_close_notify;
+      }
+      if (alert_result == ssl_open_record_error) {
+        if (alert_ret != 0) {
+          ssl_send_alert(ssl_impl, SSL3_AL_FATAL, alert_ret);
+        }
+        return ssl_open_v_error;
+      }
+      continue;
+    }
+
+    if (type != SSL3_RT_HANDSHAKE) {
+      OPENSSL_PUT_ERROR(SSL, SSL_R_UNEXPECTED_RECORD);
+      ssl_send_alert(ssl_impl, SSL3_AL_FATAL, SSL_AD_UNEXPECTED_MESSAGE);
+      return ssl_open_v_error;
+    }
+
+    if (!tls_append_handshake_data(ssl_impl, Span<const uint8_t>(plaintext))) {
+      ssl_send_alert(ssl_impl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
+      return ssl_open_v_error;
+    }
+
+    // Run the post-handshake messages the record completed. Any reply they
+    // produce is queued as pending handshake data and goes out ahead of the
+    // next sealed application data.
+    for (;;) {
+      SSLMessage msg;
+      if (!ssl_impl->method->get_message(ssl_impl, &msg)) {
+        break;
+      }
+      if (!ssl_do_post_handshake(ssl_impl, msg)) {
+        ssl_set_read_error(ssl_impl);
+        return ssl_open_v_error;
+      }
+      ssl_impl->method->next_message(ssl_impl);
+    }
+    // A partial message stays buffered for the next record, and its declared
+    // length is checked now, as the record layer does ahead of every open: the
+    // loop leaves before the next open when no further complete record is at
+    // hand, and a peer that stops after an oversized header would otherwise be
+    // waited on forever.
+    uint8_t accept_alert = SSL_AD_DECODE_ERROR;
+    if (!tls_can_accept_handshake_data(ssl_impl, &accept_alert)) {
+      ssl_send_alert(ssl_impl, SSL3_AL_FATAL, accept_alert);
+      return ssl_open_v_error;
+    }
+    if (SSL_in_init(ssl_impl)) {
+      // A post-handshake message started a new handshake, which this path does
+      // not drive: what was opened is reported, the next call is refused up
+      // front, and the caller falls back to `SSL_read` until it completes.
+      return ssl_open_v_success;
+    }
+  }
+
+  return ssl_open_v_success;
+  }();
+
+  // Every failure of the record layer poisons the read half, as the buffered
+  // read does through `ssl_open_app_data`, so a later call cannot go on opening
+  // records past a fatal error. The one exit that is not the record layer's is
+  // a handshake the peer began, which the caller drives through `SSL_read`.
+  if (result == ssl_open_v_error && !SSL_in_init(ssl_impl)) {
+    ssl_set_read_error(ssl_impl);
+  }
+
+  *out_len = produced;
+  *out_consumed = consumed;
+  return result;
+}
+
 int SSL_key_update(SSL *ssl, int request_type) {
   auto *ssl_impl = FromOpaque(ssl);
   ssl_reset_error_state(ssl_impl);

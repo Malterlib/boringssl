@@ -15,6 +15,8 @@
 #include <openssl/ssl.h>
 
 #include <assert.h>
+
+#include <algorithm>
 #include <string.h>
 
 #include <openssl/bytestring.h>
@@ -263,9 +265,10 @@ ssl_open_record_t tls_open_record(SSLImpl *ssl, uint8_t *out_type,
   return ssl_open_record_success;
 }
 
-static bool do_seal_record(SSLImpl *ssl, uint8_t *out_prefix, uint8_t *out,
-                           uint8_t *out_suffix, uint8_t type, const uint8_t *in,
-                           const size_t in_len) {
+static bool do_seal_record_v(SSLImpl *ssl, uint8_t *out_prefix, uint8_t *out,
+                             uint8_t *out_suffix, uint8_t type,
+                             Span<const CRYPTO_IVEC> in) {
+  const size_t in_len = ssl_fragments_len(in);
   SSLAEADContext *aead = ssl->s3->aead_write_ctx.get();
   uint8_t *extra_in = nullptr;
   size_t extra_in_len = 0;
@@ -281,10 +284,6 @@ static bool do_seal_record(SSLImpl *ssl, uint8_t *out_prefix, uint8_t *out,
     OPENSSL_PUT_ERROR(SSL, SSL_R_RECORD_TOO_LARGE);
     return false;
   }
-
-  assert(in == out || !buffers_alias(in, in_len, out, in_len));
-  assert(!buffers_alias(in, in_len, out_prefix, ssl_record_prefix_len(ssl)));
-  assert(!buffers_alias(in, in_len, out_suffix, suffix_len));
 
   if (extra_in_len) {
     out_prefix[0] = SSL3_RT_APPLICATION_DATA;
@@ -305,15 +304,27 @@ static bool do_seal_record(SSLImpl *ssl, uint8_t *out_prefix, uint8_t *out,
     return false;
   }
 
-  if (!aead->SealScatter(out_prefix + SSL3_RT_HEADER_LENGTH, out, out_suffix,
-                         out_prefix[0], record_version, ssl->s3->write_sequence,
-                         header, in, in_len, extra_in, extra_in_len)) {
+  if (!aead->SealScatterV(out_prefix + SSL3_RT_HEADER_LENGTH, out, out_suffix,
+                          out_prefix[0], record_version,
+                          ssl->s3->write_sequence, header, in, extra_in,
+                          extra_in_len)) {
     return false;
   }
 
   ssl->s3->write_sequence++;
   ssl_do_msg_callback(ssl, 1 /* write */, SSL3_RT_HEADER, header);
   return true;
+}
+
+static bool do_seal_record(SSLImpl *ssl, uint8_t *out_prefix, uint8_t *out,
+                           uint8_t *out_suffix, uint8_t type, const uint8_t *in,
+                           const size_t in_len) {
+  assert(in == out || !buffers_alias(in, in_len, out, in_len));
+  assert(!buffers_alias(in, in_len, out_prefix, ssl_record_prefix_len(ssl)));
+
+  const CRYPTO_IVEC ivec = {in, in_len};
+  return do_seal_record_v(ssl, out_prefix, out, out_suffix, type,
+                          Span(&ivec, 1));
 }
 
 static size_t tls_seal_scatter_prefix_len(const SSLImpl *ssl, uint8_t type,
@@ -435,6 +446,223 @@ bool tls_seal_record(SSLImpl *ssl, uint8_t *out, size_t *out_len,
   uint8_t *body = out + prefix_len;
   uint8_t *suffix = body + in_len;
   if (!tls_seal_scatter_record(ssl, prefix, body, suffix, type, in, in_len)) {
+    return false;
+  }
+
+  *out_len = prefix_len + in_len + suffix_len;
+  return true;
+}
+
+// tls_open_record_v mirrors `tls_open_record` for a record gathered from `in`
+// and decrypted into `out`. It does not act on the record type: unlike
+// `tls_open_record` it neither skips ChangeCipherSpec nor processes alerts,
+// because the plaintext is in the caller's fragments rather than in a span the
+// library can hand around. The caller dispatches on `*out_type`.
+//
+// Keep this in step with `tls_open_record`; the record checks are deliberately
+// the same ones in the same order.
+enum ssl_open_record_t tls_open_record_v(SSLImpl *ssl, uint8_t *out_type,
+                                         size_t *out_len, size_t *out_consumed,
+                                         uint8_t *out_alert,
+                                         Span<const CRYPTO_IVEC> in,
+                                         Span<const CRYPTO_IOVEC> out) {
+  *out_consumed = 0;
+  *out_len = 0;
+  if (ssl->s3->read_shutdown == ssl_shutdown_close_notify) {
+    return ssl_open_record_close_notify;
+  }
+
+  if (!tls_can_accept_handshake_data(ssl, out_alert)) {
+    return ssl_open_record_error;
+  }
+
+  const size_t in_len = ssl_fragments_len(in);
+
+  // Decode the record header, which may straddle fragments.
+  uint8_t header_storage[SSL3_RT_HEADER_LENGTH];
+  if (in_len < SSL3_RT_HEADER_LENGTH) {
+    *out_consumed = SSL3_RT_HEADER_LENGTH;
+    return ssl_open_record_partial;
+  }
+  if (!ssl_fragments_copy_in(Span(header_storage), in)) {
+    *out_alert = SSL_AD_INTERNAL_ERROR;
+    return ssl_open_record_error;
+  }
+
+  CBS cbs;
+  CBS_init(&cbs, header_storage, sizeof(header_storage));
+  uint8_t type;
+  uint16_t version, ciphertext_len;
+  if (!CBS_get_u8(&cbs, &type) ||      //
+      !CBS_get_u16(&cbs, &version) ||  //
+      !CBS_get_u16(&cbs, &ciphertext_len)) {
+    *out_consumed = SSL3_RT_HEADER_LENGTH;
+    return ssl_open_record_partial;
+  }
+
+  bool version_ok;
+  if (ssl->s3->aead_read_ctx->is_null_cipher()) {
+    version_ok = (version >> 8) == SSL3_VERSION_MAJOR;
+  } else {
+    version_ok = version == tls_record_version(ssl);
+  }
+
+  if (!version_ok) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_WRONG_VERSION_NUMBER);
+    *out_alert = SSL_AD_PROTOCOL_VERSION;
+    return ssl_open_record_error;
+  }
+
+  if (ciphertext_len > SSL3_RT_MAX_ENCRYPTED_LENGTH) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_ENCRYPTED_LENGTH_TOO_LONG);
+    *out_alert = SSL_AD_RECORD_OVERFLOW;
+    return ssl_open_record_error;
+  }
+
+  const size_t record_len = SSL3_RT_HEADER_LENGTH + size_t{ciphertext_len};
+  if (in_len < record_len) {
+    *out_consumed = record_len;
+    return ssl_open_record_partial;
+  }
+
+  Span<const uint8_t> header = Span(header_storage, SSL3_RT_HEADER_LENGTH);
+  ssl_do_msg_callback(ssl, 0 /* read */, SSL3_RT_HEADER, header);
+
+  *out_consumed = record_len;
+
+  // Isolate the record body within the fragments.
+  CRYPTO_IVEC body_storage[CRYPTO_IOVEC_MAX];
+  Span<const CRYPTO_IVEC> body;
+  if (!ssl_fragments_slice(&body, Span(body_storage), in, SSL3_RT_HEADER_LENGTH,
+                      ciphertext_len)) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_BUFFER_TOO_SMALL);
+    *out_alert = SSL_AD_INTERNAL_ERROR;
+    return ssl_open_record_error;
+  }
+
+  // Ensure the sequence number update does not overflow.
+  if (ssl->s3->read_sequence + 1 == 0) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_OVERFLOW);
+    *out_alert = SSL_AD_INTERNAL_ERROR;
+    return ssl_open_record_error;
+  }
+
+  size_t plaintext_len;
+  if (!ssl->s3->aead_read_ctx->OpenScatterV(&plaintext_len, type, version,
+                                            ssl->s3->read_sequence, header,
+                                            body, out)) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_DECRYPTION_FAILED_OR_BAD_RECORD_MAC);
+    *out_alert = SSL_AD_BAD_RECORD_MAC;
+    return ssl_open_record_error;
+  }
+
+  ssl->s3->read_sequence++;
+
+  // TLS 1.3 hides the record type inside the encrypted data.
+  bool has_padding = !ssl->s3->aead_read_ctx->is_null_cipher() &&
+                     ssl_protocol_version(ssl) >= TLS1_3_VERSION;
+
+  size_t plaintext_limit =
+      has_padding ? SSL3_RT_MAX_PLAIN_LENGTH + 1 : SSL3_RT_MAX_PLAIN_LENGTH;
+  if (plaintext_len > plaintext_limit) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_DATA_LENGTH_TOO_LONG);
+    *out_alert = SSL_AD_RECORD_OVERFLOW;
+    return ssl_open_record_error;
+  }
+
+  if (has_padding) {
+    if (type != SSL3_RT_APPLICATION_DATA) {
+      OPENSSL_PUT_ERROR(SSL, SSL_R_INVALID_OUTER_RECORD_TYPE);
+      *out_alert = SSL_AD_DECODE_ERROR;
+      return ssl_open_record_error;
+    }
+
+    do {
+      if (plaintext_len == 0) {
+        OPENSSL_PUT_ERROR(SSL, SSL_R_DECRYPTION_FAILED_OR_BAD_RECORD_MAC);
+        *out_alert = SSL_AD_DECRYPT_ERROR;
+        return ssl_open_record_error;
+      }
+      type = ssl_fragments_byte_at(out, plaintext_len - 1);
+      plaintext_len--;
+    } while (type == 0);
+  }
+
+  if (plaintext_len == 0) {
+    ssl->s3->empty_record_count++;
+    if (ssl->s3->empty_record_count > kMaxEmptyRecords) {
+      OPENSSL_PUT_ERROR(SSL, SSL_R_TOO_MANY_EMPTY_FRAGMENTS);
+      *out_alert = SSL_AD_UNEXPECTED_MESSAGE;
+      return ssl_open_record_error;
+    }
+  }
+
+  // Handshake messages may not interleave with any other record type. Alerts
+  // are exempt as in `tls_open_record`, which processes them ahead of this
+  // check: the caller handles the alert this returns, close_notify included.
+  if (type != SSL3_RT_HANDSHAKE && type != SSL3_RT_ALERT &&
+      tls_has_unprocessed_handshake_data(ssl)) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_UNEXPECTED_RECORD);
+    *out_alert = SSL_AD_UNEXPECTED_MESSAGE;
+    return ssl_open_record_error;
+  }
+
+  // Only when at least one byte is returned, clear the counters for empty
+  // records and warnings. An alert record is where the warning counter is
+  // spent, so clearing it for one would leave the limit unreachable; the caller
+  // processes the alert after this returns, which is why `tls_open_record`
+  // hands alerts to `ssl_process_alert` before it reaches the reset.
+  if (plaintext_len != 0 && type != SSL3_RT_ALERT) {
+    ssl->s3->empty_record_count = 0;
+    ssl->s3->warning_alert_count = 0;
+  }
+
+  *out_len = plaintext_len;
+  *out_type = type;
+  return ssl_open_record_success;
+}
+
+bool tls_seal_record_v(SSLImpl *ssl, uint8_t *out, size_t *out_len,
+                       size_t max_out_len, uint8_t type,
+                       Span<const CRYPTO_IVEC> in) {
+  const size_t in_len = ssl_fragments_len(in);
+
+  // Record splitting rewrites the record layout around the first plaintext
+  // byte, which a gathered plaintext would have to be taken apart to supply.
+  // It only applies to the TLS 1.0 CBC ciphers, so refuse instead and let the
+  // caller fall back to the contiguous path.
+  if (type == SSL3_RT_APPLICATION_DATA && in_len > 1 &&
+      ssl_needs_record_splitting(ssl)) {
+    OPENSSL_PUT_ERROR(SSL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
+    return false;
+  }
+
+  for (const CRYPTO_IVEC &frag : in) {
+    if (buffers_alias(frag.in, frag.len, out, max_out_len)) {
+      OPENSSL_PUT_ERROR(SSL, SSL_R_OUTPUT_ALIASES_INPUT);
+      return false;
+    }
+  }
+
+  const size_t prefix_len = tls_seal_scatter_prefix_len(ssl, type, in_len);
+  size_t suffix_len;
+  if (!tls_seal_scatter_suffix_len(ssl, &suffix_len, type, in_len)) {
+    return false;
+  }
+  if (in_len + prefix_len < in_len ||
+      prefix_len + in_len + suffix_len < prefix_len + in_len) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_RECORD_TOO_LARGE);
+    return false;
+  }
+  if (max_out_len < in_len + prefix_len + suffix_len) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_BUFFER_TOO_SMALL);
+    return false;
+  }
+
+  uint8_t *prefix = out;
+  uint8_t *body = out + prefix_len;
+  uint8_t *suffix = body + in_len;
+  if (!do_seal_record_v(ssl, prefix, body, suffix, type, in)) {
     return false;
   }
 
