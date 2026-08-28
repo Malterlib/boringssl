@@ -560,6 +560,44 @@ class SSLAEADContext {
                    Span<const uint8_t> header, const uint8_t *in, size_t in_len,
                    const uint8_t *extra_in, size_t extra_in_len);
 
+  // SealScatterV is `SealScatter` with the plaintext gathered from several
+  // fragments. The fragments are logically concatenated, so the record written
+  // is identical to the one `SealScatter` would write for the concatenation.
+  //
+  // `in` may hold at most `CRYPTO_IOVEC_MAX` - 1 fragments, leaving room for
+  // the fragment `extra_in` occupies. A fragment's data may alias the part of
+  // `out` it is written to, but nothing may alias anything else.
+  bool SealScatterV(uint8_t *out_prefix, uint8_t *out, uint8_t *out_suffix,
+                    uint8_t type, uint16_t record_version, uint64_t seqnum,
+                    Span<const uint8_t> header, Span<const CRYPTO_IVEC> in,
+                    const uint8_t *extra_in, size_t extra_in_len);
+
+  // OpenScatterV authenticates and decrypts the record body gathered from `in`,
+  // writing the plaintext to the `out` fragments and the plaintext length to
+  // `*out_len`. It returns true on success and false on error.
+  //
+  // Unlike `Open`, the plaintext does not have to land in `in`: the `out`
+  // fragments may be disjoint from it. The fragments on each side are logically
+  // concatenated, so a record may straddle them.
+  //
+  // `out` must cover the record body that remains after the explicit nonce,
+  // that is the ciphertext and its tag, even though only the plaintext is
+  // written. A shorter output is refused rather than partially decrypted.
+  //
+  // The merged fragment count is what is bounded: `in` and `out` boundaries are
+  // paired at their union, which must not exceed `CRYPTO_IOVEC_MAX`.
+  bool OpenScatterV(size_t *out_len, uint8_t type, uint16_t record_version,
+                    uint64_t seqnum, Span<const uint8_t> header,
+                    Span<const CRYPTO_IVEC> in, Span<const CRYPTO_IOVEC> out);
+
+  // FixedTagLen reports the tag length when the AEAD always produces the same one, so
+  // the plaintext length of a record is known before it is opened.
+  bool FixedTagLen(size_t *out_tag_len) const;
+
+  // OpenPlaintextLen reports how much plaintext a record body of `body_len` bytes
+  // produces, or the whole body when that cannot be known ahead of time.
+  size_t OpenPlaintextLen(size_t body_len) const;
+
   bool GetIV(const uint8_t **out_iv, size_t *out_iv_len) const;
 
  private:
@@ -756,6 +794,24 @@ enum ssl_open_record_t tls_open_record(SSLImpl *ssl, uint8_t *out_type,
                                        Span<uint8_t> *out, size_t *out_consumed,
                                        uint8_t *out_alert, Span<uint8_t> in);
 
+// tls_open_record_v is `tls_open_record` for a record gathered from the `in`
+// fragments and decrypted into the `out` fragments, which need not overlap the
+// input. On success `*out_len` is the plaintext written and `*out_type` its
+// record type.
+//
+// Unlike `tls_open_record` it does not act on the type: it neither skips
+// ChangeCipherSpec nor processes alerts, because the plaintext lives in the
+// caller's fragments rather than in a span the library can pass around. The
+// caller dispatches on `*out_type`.
+//
+// `out` must cover the record body after the explicit nonce, per
+// `SSLAEADContext::OpenScatterV`.
+enum ssl_open_record_t tls_open_record_v(SSLImpl *ssl, uint8_t *out_type,
+                                         size_t *out_len, size_t *out_consumed,
+                                         uint8_t *out_alert,
+                                         Span<const CRYPTO_IVEC> in,
+                                         Span<const CRYPTO_IOVEC> out);
+
 // dtls_open_record implements `tls_open_record` for DTLS. It only returns
 // `ssl_open_record_partial` if `in` was empty and sets `*out_consumed` to
 // zero. The caller should read one packet and try again. On success,
@@ -784,6 +840,188 @@ bool ssl_needs_record_splitting(const SSLImpl *ssl);
 bool tls_seal_record(SSLImpl *ssl, uint8_t *out, size_t *out_len,
                      size_t max_out, uint8_t type, const uint8_t *in,
                      size_t in_len);
+
+// kMaxSealFragments is the number of plaintext fragments one record may be
+// assembled from. It is one short of `CRYPTO_IOVEC_MAX` because TLS 1.3 spends
+// a fragment on the inner content type.
+inline constexpr size_t kMaxSealFragments = CRYPTO_IOVEC_MAX - 1;
+
+// Fragment lists describe one logical byte range gathered from several buffers.
+// `CRYPTO_IVEC` describes read-only input fragments; `CRYPTO_IOVEC` describes
+// output fragments, of which only `out` and `len` are read.
+
+inline size_t ssl_fragments_len(Span<const CRYPTO_IVEC> frags) {
+  size_t total = 0;
+  for (const CRYPTO_IVEC &frag : frags) {
+    total += frag.len;
+  }
+  return total;
+}
+
+inline size_t ssl_fragments_len(Span<const CRYPTO_IOVEC> frags) {
+  size_t total = 0;
+  for (const CRYPTO_IOVEC &frag : frags) {
+    total += frag.len;
+  }
+  return total;
+}
+
+// ssl_fragments_copy_in copies the first `out.size()` bytes of `frags` into
+// `out`. It returns false if the fragments hold fewer bytes than that.
+inline bool ssl_fragments_copy_in(Span<uint8_t> out,
+                                  Span<const CRYPTO_IVEC> frags) {
+  size_t done = 0;
+  for (const CRYPTO_IVEC &frag : frags) {
+    if (done == out.size()) {
+      break;
+    }
+    size_t todo = std::min(frag.len, out.size() - done);
+    OPENSSL_memcpy(out.data() + done, frag.in, todo);
+    done += todo;
+  }
+  return done == out.size();
+}
+
+// ssl_fragments_copy_out is `ssl_fragments_copy_in` for output fragments.
+inline bool ssl_fragments_copy_out(Span<uint8_t> out,
+                                   Span<const CRYPTO_IOVEC> frags) {
+  size_t done = 0;
+  for (const CRYPTO_IOVEC &frag : frags) {
+    if (done == out.size()) {
+      break;
+    }
+    size_t todo = std::min(frag.len, out.size() - done);
+    OPENSSL_memcpy(out.data() + done, frag.out, todo);
+    done += todo;
+  }
+  return done == out.size();
+}
+
+// ssl_fragments_byte_at returns the byte at `offset`, which must be in range.
+inline uint8_t ssl_fragments_byte_at(Span<const CRYPTO_IOVEC> frags,
+                                     size_t offset) {
+  for (const CRYPTO_IOVEC &frag : frags) {
+    if (offset < frag.len) {
+      return frag.out[offset];
+    }
+    offset -= frag.len;
+  }
+  assert(false);
+  return 0;
+}
+
+// ssl_fragments_slice points `*out` at the `len` bytes of `frags` starting at
+// `offset`, using `storage` for the entries. It returns false if the range runs
+// past the fragments or needs more entries than `storage` holds.
+inline bool ssl_fragments_slice(Span<const CRYPTO_IVEC> *out,
+                                Span<CRYPTO_IVEC> storage,
+                                Span<const CRYPTO_IVEC> frags, size_t offset,
+                                size_t len) {
+  size_t num = 0;
+  for (const CRYPTO_IVEC &frag : frags) {
+    if (len == 0) {
+      break;
+    }
+    size_t skip = std::min(frag.len, offset);
+    offset -= skip;
+    if (skip == frag.len) {
+      continue;
+    }
+    size_t todo = std::min(frag.len - skip, len);
+    if (num == storage.size()) {
+      return false;
+    }
+    storage[num].in = frag.in + skip;
+    storage[num].len = todo;
+    num++;
+    len -= todo;
+  }
+  if (len != 0) {
+    return false;
+  }
+  *out = Span(storage.data(), num);
+  return true;
+}
+
+// ssl_fragments_slice_out is `ssl_fragments_slice` for output fragments.
+inline bool ssl_fragments_slice_out(Span<const CRYPTO_IOVEC> *out,
+                                    Span<CRYPTO_IOVEC> storage,
+                                    Span<const CRYPTO_IOVEC> frags,
+                                    size_t offset, size_t len) {
+  size_t num = 0;
+  for (const CRYPTO_IOVEC &frag : frags) {
+    if (len == 0) {
+      break;
+    }
+    size_t skip = std::min(frag.len, offset);
+    offset -= skip;
+    if (skip == frag.len) {
+      continue;
+    }
+    size_t todo = std::min(frag.len - skip, len);
+    if (num == storage.size()) {
+      return false;
+    }
+    storage[num].in = nullptr;
+    storage[num].out = frag.out + skip;
+    storage[num].len = todo;
+    num++;
+    len -= todo;
+  }
+  if (len != 0) {
+    return false;
+  }
+  *out = Span(storage.data(), num);
+  return true;
+}
+
+// ssl_fragments_pair pairs `in` and `out` at the union of their boundaries, so
+// the paired list describes the same logical transfer. It returns false if the
+// pairing needs more entries than `storage` holds, or `out` is shorter than
+// `in`.
+inline bool ssl_fragments_pair(Span<const CRYPTO_IOVEC> *out_pairs,
+                               Span<CRYPTO_IOVEC> storage,
+                               Span<const CRYPTO_IVEC> in,
+                               Span<const CRYPTO_IOVEC> out) {
+  size_t num = 0, i = 0, o = 0, i_off = 0, o_off = 0;
+  while (i < in.size()) {
+    if (in[i].len == i_off) {
+      i++;
+      i_off = 0;
+      continue;
+    }
+    while (o < out.size() && out[o].len == o_off) {
+      o++;
+      o_off = 0;
+    }
+    if (o == out.size()) {
+      // The output does not cover the input.
+      return false;
+    }
+    size_t todo = std::min(in[i].len - i_off, out[o].len - o_off);
+    if (num == storage.size()) {
+      return false;
+    }
+    storage[num].in = in[i].in + i_off;
+    storage[num].out = out[o].out + o_off;
+    storage[num].len = todo;
+    num++;
+    i_off += todo;
+    o_off += todo;
+  }
+  *out_pairs = Span(storage.data(), num);
+  return true;
+}
+
+// tls_seal_record_v is `tls_seal_record` with the plaintext gathered from
+// several fragments, which are logically concatenated. The record written is
+// identical to the one `tls_seal_record` would write for the concatenation.
+//
+// It refuses when record splitting applies, since that layout is defined around
+// the first plaintext byte. No fragment may alias `out`.
+bool tls_seal_record_v(SSLImpl *ssl, uint8_t *out, size_t *out_len,
+                       size_t max_out, uint8_t type,
+                       Span<const CRYPTO_IVEC> in);
 
 // dtls_record_header_write_len returns the length of the record header that
 // will be written at `epoch`.

@@ -17,6 +17,8 @@
 #include <assert.h>
 #include <string.h>
 
+#include <algorithm>
+
 #include <openssl/aead.h>
 #include <openssl/err.h>
 #include <openssl/rand.h>
@@ -302,22 +304,47 @@ bool SSLAEADContext::SealScatter(uint8_t *out_prefix, uint8_t *out,
                                  Span<const uint8_t> header, const uint8_t *in,
                                  size_t in_len, const uint8_t *extra_in,
                                  size_t extra_in_len) {
+  const CRYPTO_IVEC ivec = {in, in_len};
+  return SealScatterV(out_prefix, out, out_suffix, type, record_version, seqnum,
+                      header, Span(&ivec, 1), extra_in, extra_in_len);
+}
+
+bool SSLAEADContext::SealScatterV(uint8_t *out_prefix, uint8_t *out,
+                                  uint8_t *out_suffix, uint8_t type,
+                                  uint16_t record_version, uint64_t seqnum,
+                                  Span<const uint8_t> header,
+                                  Span<const CRYPTO_IVEC> in,
+                                  const uint8_t *extra_in,
+                                  size_t extra_in_len) {
+  const size_t in_len = ssl_fragments_len(in);
   const size_t prefix_len = ExplicitNonceLen();
   size_t suffix_len;
   if (!SuffixLen(&suffix_len, in_len, extra_in_len)) {
     OPENSSL_PUT_ERROR(SSL, SSL_R_RECORD_TOO_LARGE);
     return false;
   }
-  if ((in != out && buffers_alias(in, in_len, out, in_len)) ||
-      buffers_alias(in, in_len, out_prefix, prefix_len) ||
-      buffers_alias(in, in_len, out_suffix, suffix_len)) {
-    OPENSSL_PUT_ERROR(SSL, SSL_R_OUTPUT_ALIASES_INPUT);
-    return false;
+
+  // Each fragment may be sealed over itself, but may not touch anything else.
+  size_t offset = 0;
+  for (const CRYPTO_IVEC &frag : in) {
+    uint8_t *frag_out = out + offset;
+    if ((frag.in != frag_out && buffers_alias(frag.in, frag.len, frag_out,
+                                              frag.len)) ||
+        buffers_alias(frag.in, frag.len, out_prefix, prefix_len) ||
+        buffers_alias(frag.in, frag.len, out_suffix, suffix_len)) {
+      OPENSSL_PUT_ERROR(SSL, SSL_R_OUTPUT_ALIASES_INPUT);
+      return false;
+    }
+    offset += frag.len;
   }
 
   if (is_null_cipher() || CRYPTO_fuzzer_mode_enabled()) {
     // Handle the initial NULL cipher.
-    OPENSSL_memmove(out, in, in_len);
+    offset = 0;
+    for (const CRYPTO_IVEC &frag : in) {
+      OPENSSL_memmove(out + offset, frag.in, frag.len);
+      offset += frag.len;
+    }
     OPENSSL_memmove(out_suffix, extra_in, extra_in_len);
     return true;
   }
@@ -356,9 +383,11 @@ bool SSLAEADContext::SealScatter(uint8_t *out_prefix, uint8_t *out,
   // Emit the variable nonce if included in the record.
   if (variable_nonce_included_in_record_) {
     assert(!xor_fixed_nonce_);
-    if (buffers_alias(in, in_len, out_prefix, variable_nonce_len_)) {
-      OPENSSL_PUT_ERROR(SSL, SSL_R_OUTPUT_ALIASES_INPUT);
-      return false;
+    for (const CRYPTO_IVEC &frag : in) {
+      if (buffers_alias(frag.in, frag.len, out_prefix, variable_nonce_len_)) {
+        OPENSSL_PUT_ERROR(SSL, SSL_R_OUTPUT_ALIASES_INPUT);
+        return false;
+      }
     }
     OPENSSL_memcpy(out_prefix, nonce + fixed_nonce_.size(),
                    variable_nonce_len_);
@@ -372,12 +401,224 @@ bool SSLAEADContext::SealScatter(uint8_t *out_prefix, uint8_t *out,
     }
   }
 
-  size_t written_suffix_len;
-  bool result = !!EVP_AEAD_CTX_seal_scatter(
-      ctx_.get(), out, out_suffix, &written_suffix_len, suffix_len, nonce,
-      nonce_len, in, in_len, extra_in, extra_in_len, ad.data(), ad.size());
-  assert(!result || written_suffix_len == suffix_len);
-  return result;
+  // `out_suffix` holds the ciphertext of `extra_in` followed by the tag, which
+  // is the layout `EVP_AEAD_CTX_seal_scatter` produces.
+  if (suffix_len < extra_in_len) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_BUFFER_TOO_SMALL);
+    return false;
+  }
+
+  CRYPTO_IOVEC iovecs[CRYPTO_IOVEC_MAX];
+  size_t num_iovecs = 0;
+  offset = 0;
+  for (const CRYPTO_IVEC &frag : in) {
+    if (frag.len != 0) {
+      if (num_iovecs == CRYPTO_IOVEC_MAX ||
+          (extra_in_len != 0 && num_iovecs == CRYPTO_IOVEC_MAX - 1)) {
+        OPENSSL_PUT_ERROR(SSL, SSL_R_BUFFER_TOO_SMALL);
+        return false;
+      }
+      iovecs[num_iovecs].in = frag.in;
+      iovecs[num_iovecs].out = out + offset;
+      iovecs[num_iovecs].len = frag.len;
+      num_iovecs++;
+    }
+    offset += frag.len;
+  }
+  if (extra_in_len != 0) {
+    assert(num_iovecs < CRYPTO_IOVEC_MAX);
+    iovecs[num_iovecs].in = extra_in;
+    iovecs[num_iovecs].out = out_suffix;
+    iovecs[num_iovecs].len = extra_in_len;
+    num_iovecs++;
+  }
+
+  CRYPTO_IVEC aadvec[1];
+  aadvec[0].in = ad.data();
+  aadvec[0].len = ad.size();
+
+  size_t written_tag_len;
+  if (!EVP_AEAD_CTX_sealv(ctx_.get(), iovecs, num_iovecs,
+                          out_suffix + extra_in_len, &written_tag_len,
+                          suffix_len - extra_in_len, nonce, nonce_len, aadvec,
+                          1)) {
+    return false;
+  }
+  assert(written_tag_len + extra_in_len == suffix_len);
+  return true;
+}
+
+bool SSLAEADContext::OpenScatterV(size_t *out_len, uint8_t type,
+                                  uint16_t record_version, uint64_t seqnum,
+                                  Span<const uint8_t> header,
+                                  Span<const CRYPTO_IVEC> in,
+                                  Span<const CRYPTO_IOVEC> out) {
+  const size_t in_len = ssl_fragments_len(in);
+
+  if (is_null_cipher() || CRYPTO_fuzzer_mode_enabled()) {
+    // Handle the initial NULL cipher. The body is the plaintext.
+    Span<const CRYPTO_IOVEC> pairs;
+    CRYPTO_IOVEC pair_storage[CRYPTO_IOVEC_MAX];
+    if (!ssl_fragments_pair(&pairs, Span(pair_storage), in, out)) {
+      OPENSSL_PUT_ERROR(SSL, SSL_R_BUFFER_TOO_SMALL);
+      return false;
+    }
+    for (const CRYPTO_IOVEC &pair : pairs) {
+      OPENSSL_memmove(pair.out, pair.in, pair.len);
+    }
+    *out_len = in_len;
+    return true;
+  }
+
+  // TLS 1.2 AEADs include the length in the AD and are assumed to have fixed
+  // overhead. Otherwise the parameter is unused.
+  size_t plaintext_len = 0;
+  if (!omit_length_in_ad_) {
+    size_t overhead = MaxOverhead();
+    if (in_len < overhead) {
+      // Publicly invalid.
+      OPENSSL_PUT_ERROR(SSL, SSL_R_BAD_PACKET_LENGTH);
+      return false;
+    }
+    plaintext_len = in_len - overhead;
+  }
+
+  uint8_t ad_storage[13];
+  Span<const uint8_t> ad = GetAdditionalData(ad_storage, type, record_version,
+                                             seqnum, plaintext_len, header);
+
+  // Assemble the nonce.
+  uint8_t nonce[EVP_AEAD_MAX_NONCE_LENGTH];
+  size_t nonce_len = 0;
+
+  // Prepend the fixed nonce, or left-pad with zeros if XORing.
+  if (xor_fixed_nonce_) {
+    nonce_len = fixed_nonce_.size() - variable_nonce_len_;
+    OPENSSL_memset(nonce, 0, nonce_len);
+  } else {
+    OPENSSL_memcpy(nonce, fixed_nonce_.data(), fixed_nonce_.size());
+    nonce_len += fixed_nonce_.size();
+  }
+
+  // Add the variable nonce, which the record carries ahead of the ciphertext
+  // and may therefore straddle fragments.
+  Span<const CRYPTO_IVEC> body = in;
+  CRYPTO_IVEC body_storage[CRYPTO_IOVEC_MAX];
+  if (variable_nonce_included_in_record_) {
+    if (in_len < variable_nonce_len_) {
+      // Publicly invalid.
+      OPENSSL_PUT_ERROR(SSL, SSL_R_BAD_PACKET_LENGTH);
+      return false;
+    }
+    if (!ssl_fragments_copy_in(Span(nonce + nonce_len, variable_nonce_len_), in) ||
+        !ssl_fragments_slice(&body, Span(body_storage), in, variable_nonce_len_,
+                            in_len - variable_nonce_len_)) {
+      OPENSSL_PUT_ERROR(SSL, SSL_R_BUFFER_TOO_SMALL);
+      return false;
+    }
+  } else {
+    assert(variable_nonce_len_ == 8);
+    CRYPTO_store_u64_be(nonce + nonce_len, seqnum);
+  }
+  nonce_len += variable_nonce_len_;
+
+  // XOR the fixed nonce, if necessary.
+  if (xor_fixed_nonce_) {
+    assert(nonce_len == fixed_nonce_.size());
+    for (size_t i = 0; i < fixed_nonce_.size(); i++) {
+      nonce[i] ^= fixed_nonce_[i];
+    }
+  }
+
+  // The output has to cover the record body that remains after the explicit
+  // nonce, which is the ciphertext plus its tag. Less than that cannot be
+  // decrypted, so the caller is told to make more room rather than given a
+  // partial record.
+  CRYPTO_IVEC aadvec[1];
+  aadvec[0].in = ad.data();
+  aadvec[0].len = ad.size();
+
+  // With a fixed length tag the plaintext length is known before decrypting, so the
+  // tag can be taken out and only the ciphertext paired with the output. That is what
+  // lets the output be sized to the plaintext rather than to the whole record body,
+  // which a caller decrypting into an exactly sized destination depends on.
+  size_t tag_len;
+  if (FixedTagLen(&tag_len)) {
+    const size_t body_len = ssl_fragments_len(body);
+    if (body_len < tag_len) {
+      // Publicly invalid.
+      OPENSSL_PUT_ERROR(SSL, SSL_R_BAD_PACKET_LENGTH);
+      return false;
+    }
+    const size_t ciphertext_len = body_len - tag_len;
+
+    Span<const CRYPTO_IVEC> ciphertext, tag_frags;
+    CRYPTO_IVEC ciphertext_storage[CRYPTO_IOVEC_MAX];
+    CRYPTO_IVEC tag_frag_storage[CRYPTO_IOVEC_MAX];
+    uint8_t tag_storage[EVP_AEAD_MAX_OVERHEAD];
+    if (!ssl_fragments_slice(&ciphertext, Span(ciphertext_storage), body, 0,
+                             ciphertext_len) ||
+        !ssl_fragments_slice(&tag_frags, Span(tag_frag_storage), body,
+                             ciphertext_len, tag_len) ||
+        !ssl_fragments_copy_in(Span(tag_storage, tag_len), tag_frags)) {
+      OPENSSL_PUT_ERROR(SSL, SSL_R_BUFFER_TOO_SMALL);
+      return false;
+    }
+
+    Span<const CRYPTO_IOVEC> pairs;
+    CRYPTO_IOVEC pair_storage[CRYPTO_IOVEC_MAX];
+    if (!ssl_fragments_pair(&pairs, Span(pair_storage), ciphertext, out)) {
+      OPENSSL_PUT_ERROR(SSL, SSL_R_BUFFER_TOO_SMALL);
+      return false;
+    }
+
+    if (!EVP_AEAD_CTX_openv_detached(ctx_.get(), pairs.data(), pairs.size(),
+                                     nonce, nonce_len, tag_storage, tag_len,
+                                     aadvec, 1)) {
+      return false;
+    }
+
+    *out_len = ciphertext_len;
+    return true;
+  }
+
+  // Variable overhead, so the plaintext length is only known once it is decrypted and
+  // the output has to cover the whole body.
+  Span<const CRYPTO_IOVEC> pairs;
+  CRYPTO_IOVEC pair_storage[CRYPTO_IOVEC_MAX];
+  if (!ssl_fragments_pair(&pairs, Span(pair_storage), body, out)) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_BUFFER_TOO_SMALL);
+    return false;
+  }
+
+  return !!EVP_AEAD_CTX_openv(ctx_.get(), pairs.data(), pairs.size(), out_len,
+                              nonce, nonce_len, aadvec, 1);
+}
+
+bool SSLAEADContext::FixedTagLen(size_t *out_tag_len) const {
+  if (is_null_cipher() || CRYPTO_fuzzer_mode_enabled() ||
+      SSL_CIPHER_is_block_cipher(cipher())) {
+    // A null cipher has no tag, and the TLS CBC constructions pad, so how much of a
+    // record is plaintext is not known until it has been opened.
+    return false;
+  }
+
+  *out_tag_len = EVP_AEAD_max_overhead(EVP_AEAD_CTX_aead(ctx_.get()));
+  return true;
+}
+
+// OpenPlaintextLen reports how much plaintext a record body of `body_len` bytes will
+// produce, so a caller can tell whether its output has room before opening. When that
+// cannot be known ahead of time it reports the whole body, which is the conservative
+// answer.
+size_t SSLAEADContext::OpenPlaintextLen(size_t body_len) const {
+  size_t tag_len;
+  if (!FixedTagLen(&tag_len)) {
+    return body_len;
+  }
+
+  size_t overhead = ExplicitNonceLen() + tag_len;
+  return body_len <= overhead ? 0 : body_len - overhead;
 }
 
 bool SSLAEADContext::Seal(uint8_t *out, size_t *out_len, size_t max_out_len,

@@ -5573,6 +5573,95 @@ OPENSSL_EXPORT void SSL_CTX_set_permute_extensions(SSL_CTX *ctx, int enabled);
 // permute extensions. For now, this is only implemented for the ClientHello.
 OPENSSL_EXPORT void SSL_set_permute_extensions(SSL *ssl, int enabled);
 
+// Zero-copy application data.
+//
+// These functions move application data between fragment lists the caller owns
+// and the record layer, without copying through buffers of the library's. They
+// run only in the post-handshake steady state and refuse otherwise, so a caller
+// keeps `SSL_write` and `SSL_read` as the general path and uses these when they
+// apply.
+
+// ssl_open_v_result_t is the result of `SSL_open_app_datav`.
+enum ssl_open_v_result_t {
+  // ssl_open_v_success indicates the call made as much progress as the input
+  // and output allowed. It stops when the input holds no further complete
+  // record or the output cannot fit the next one.
+  ssl_open_v_success = 0,
+  // ssl_open_v_close_notify indicates a close_notify alert was received. Data
+  // opened before it is still reported.
+  ssl_open_v_close_notify,
+  // ssl_open_v_refused indicates the connection is not in a state this entry
+  // point runs in. Nothing was read and no state changed, so the caller may use
+  // `SSL_read` for the same data.
+  ssl_open_v_refused,
+  // ssl_open_v_error indicates an error. Records opened before it are still
+  // reported through `*out_len` and `*out_consumed`, and the read sequence has
+  // advanced over them, so the caller may not open them again by another route.
+  // Any alert to send has already been queued for the write BIO.
+  ssl_open_v_error,
+};
+
+// ssl_seal_v_result_t is the result of `SSL_seal_app_datav`.
+enum ssl_seal_v_result_t {
+  // ssl_seal_v_success indicates the call sealed as much of the input as the
+  // output allowed.
+  ssl_seal_v_success = 0,
+  // ssl_seal_v_refused indicates the connection is not in a state this entry
+  // point runs in. Nothing was sealed and no state changed, so the caller may
+  // use `SSL_write` for the same data.
+  ssl_seal_v_refused,
+  // ssl_seal_v_error indicates an error after the write state had already
+  // moved: post-handshake output may have been taken from the library and
+  // records may have been sealed. Neither can be produced again, so the
+  // connection cannot continue.
+  ssl_seal_v_error,
+};
+
+// SSL_seal_app_datav seals the plaintext gathered from `in` into `out` as one
+// or more application data records, writing the bytes produced to `*out_len`
+// and the plaintext taken to `*out_consumed`.
+//
+// The fragments are logically concatenated, so the records are the ones
+// `SSL_write` would produce for the concatenation. A record is assembled from
+// at most `CRYPTO_IOVEC_MAX` - 1 fragments and closed early when that runs out
+// before the record is full.
+//
+// Any pending post-handshake output is written ahead of the application data,
+// so the caller must send `out` in full, in order, before sealing again.
+// Sealing advances the record sequence number, so sealed bytes cannot be
+// re-created: the caller owns them until they are sent.
+//
+// It refuses unless the handshake is finished, the write side is open, and the
+// library holds no ciphertext of its own, and it does not support DTLS, QUIC,
+// or TLS 1.0 CBC record splitting.
+OPENSSL_EXPORT enum ssl_seal_v_result_t SSL_seal_app_datav(
+    SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out,
+    const CRYPTO_IVEC *in, size_t num_in, size_t *out_consumed);
+
+// SSL_open_app_datav opens the records gathered from `in`, writing the
+// application data to the `out` fragments. `*out_len` is the plaintext written
+// and `*out_consumed` the input taken.
+//
+// Only `out` and `len` are read from each `CRYPTO_IOVEC` of `out`; the
+// fragments need not overlap `in`. `out` must have room for a whole record
+// body, not just its plaintext, and the library may write into it past
+// `*out_len` while handling records that carry no application data.
+//
+// Records that are not application data are handled internally: post-handshake
+// messages are processed, and any reply is queued for the next
+// `SSL_seal_app_datav` or write.
+//
+// Each of `num_in` and `num_out` may be at most `CRYPTO_IOVEC_MAX`. A record
+// that straddles input fragments is handled, so two input fragments are enough
+// to carry an incomplete record over from a previous call.
+//
+// It refuses unless the handshake is finished and `SSL_read` holds no buffered
+// plaintext, and it does not support DTLS or QUIC.
+OPENSSL_EXPORT enum ssl_open_v_result_t SSL_open_app_datav(
+    SSL *ssl, const CRYPTO_IOVEC *out, size_t num_out, size_t *out_len,
+    size_t *out_consumed, const CRYPTO_IVEC *in, size_t num_in);
+
+
 // SSL_max_seal_overhead returns the maximum overhead, in bytes, of sealing a
 // record with `ssl`.
 OPENSSL_EXPORT size_t SSL_max_seal_overhead(const SSL *ssl);
