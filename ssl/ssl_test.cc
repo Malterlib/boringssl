@@ -12081,5 +12081,551 @@ TEST(SSLTest, SessionCrossContextCache) {
   EXPECT_FALSE(SSL_CTX_add_session(ctx_b.get(), session.get()));
 }
 
+// Tests of the zero-copy entry points `SSL_seal_app_datav` and
+// `SSL_open_app_datav`, which must behave as `SSL_write` and `SSL_read`.
+
+struct ZeroCopyParam {
+  uint16_t version;
+  const char *cipher;
+};
+
+static bool ZeroCopyConnect(const ZeroCopyParam &param,
+                            bssl::UniquePtr<SSL> *client,
+                            bssl::UniquePtr<SSL> *server,
+                            bssl::UniquePtr<SSL_CTX> *client_ctx,
+                            bssl::UniquePtr<SSL_CTX> *server_ctx) {
+  *client_ctx = bssl::UniquePtr<SSL_CTX>(SSL_CTX_new(TLS_method()));
+  *server_ctx = CreateContextWithTestCertificate(TLS_method());
+  if (!*client_ctx || !*server_ctx) {
+    return false;
+  }
+  for (SSL_CTX *ctx : {client_ctx->get(), server_ctx->get()}) {
+    if (!SSL_CTX_set_min_proto_version(ctx, param.version) ||
+        !SSL_CTX_set_max_proto_version(ctx, param.version) ||
+        (param.cipher != nullptr &&
+         !SSL_CTX_set_strict_cipher_list(ctx, param.cipher))) {
+      return false;
+    }
+  }
+  return ConnectClientAndServer(client, server, client_ctx->get(),
+                                server_ctx->get());
+}
+
+// Splits `buf` into `num` fragments at pseudo-random boundaries.
+static std::vector<CRYPTO_IVEC> ZeroCopySplit(Span<const uint8_t> buf,
+                                              size_t num, uint32_t *seed) {
+  std::vector<size_t> cuts;
+  for (size_t i = 0; i + 1 < num; i++) {
+    *seed = *seed * 1103515245 + 12345;
+    cuts.push_back(buf.empty() ? 0 : (*seed >> 8) % (buf.size() + 1));
+  }
+  std::sort(cuts.begin(), cuts.end());
+  std::vector<CRYPTO_IVEC> out;
+  size_t prev = 0;
+  for (size_t cut : cuts) {
+    out.push_back({buf.data() + prev, cut - prev});
+    prev = cut;
+  }
+  out.push_back({buf.data() + prev, buf.size() - prev});
+  return out;
+}
+
+// What is buffered in the transport from the peer of `ssl` to `ssl`.
+static std::vector<uint8_t> ZeroCopyDrain(SSL *ssl) {
+  std::vector<uint8_t> out;
+  uint8_t buf[4096];
+  for (;;) {
+    int n = BIO_read(SSL_get_rbio(ssl), buf, sizeof(buf));
+    if (n <= 0) {
+      break;
+    }
+    out.insert(out.end(), buf, buf + n);
+  }
+  return out;
+}
+
+// Opens `wire` on `ssl` until it fails, ends or needs more input.
+static enum ssl_open_v_result_t ZeroCopyOpenAll(SSL *ssl,
+                                                Span<const uint8_t> wire,
+                                                std::vector<uint8_t> *plain,
+                                                size_t *out_consumed) {
+  size_t offset = 0;
+  enum ssl_open_v_result_t result = ssl_open_v_success;
+  plain->clear();
+  while (offset < wire.size()) {
+    std::vector<uint8_t> buf(32768);
+    CRYPTO_IOVEC out = {buf.data(), nullptr, buf.size()};
+    CRYPTO_IVEC in = {wire.data() + offset, wire.size() - offset};
+    size_t produced = 0, consumed = 0;
+    result = SSL_open_app_datav(ssl, &out, 1, &produced, &consumed, &in, 1);
+    plain->insert(plain->end(), buf.begin(), buf.begin() + produced);
+    offset += consumed;
+    if (result != ssl_open_v_success || consumed == 0) {
+      break;
+    }
+  }
+  *out_consumed = offset;
+  return result;
+}
+
+class ZeroCopyTest : public testing::TestWithParam<ZeroCopyParam> {};
+
+INSTANTIATE_TEST_SUITE_P(
+    All, ZeroCopyTest,
+    testing::Values(
+        ZeroCopyParam{TLS1_3_VERSION, nullptr},
+        ZeroCopyParam{TLS1_2_VERSION, "ECDHE-RSA-AES128-GCM-SHA256"},
+        ZeroCopyParam{TLS1_2_VERSION, "ECDHE-RSA-CHACHA20-POLY1305"},
+        ZeroCopyParam{TLS1_2_VERSION, "ECDHE-RSA-AES128-SHA"},
+        ZeroCopyParam{TLS1_1_VERSION, "ECDHE-RSA-AES128-SHA"}));
+
+// Data sealed and opened with fragmented input and output arrives intact, and
+// `SSL_write` and `SSL_read` keep working after it.
+TEST_P(ZeroCopyTest, RoundTrip) {
+  bssl::UniquePtr<SSL_CTX> client_ctx, server_ctx;
+  bssl::UniquePtr<SSL> client, server;
+  ASSERT_TRUE(
+      ZeroCopyConnect(GetParam(), &client, &server, &client_ctx, &server_ctx));
+  uint32_t seed = 1;
+  for (int iter = 0; iter < 200; iter++) {
+    SCOPED_TRACE(iter);
+    size_t len = (iter * 7919) % 50000;
+    std::vector<uint8_t> plain(len);
+    for (size_t i = 0; i < len; i++) {
+      plain[i] = uint8_t(i * 31 + iter);
+    }
+    auto in_frags = ZeroCopySplit(plain, 1 + iter % 40, &seed);
+    std::vector<uint8_t> wire(len + 64 * 1024);
+    size_t wire_len = 0, consumed = 0;
+    while (consumed < len) {
+      std::vector<CRYPTO_IVEC> rest;
+      size_t skip = consumed;
+      for (const CRYPTO_IVEC &frag : in_frags) {
+        size_t skipped = std::min(skip, frag.len);
+        skip -= skipped;
+        if (frag.len != skipped) {
+          rest.push_back({frag.in + skipped, frag.len - skipped});
+        }
+      }
+      size_t written = 0, sealed = 0;
+      ASSERT_EQ(ssl_seal_v_success,
+                SSL_seal_app_datav(client.get(), wire.data() + wire_len,
+                                   &written, wire.size() - wire_len,
+                                   rest.data(), rest.size(), &sealed));
+      ASSERT_GT(sealed, 0u);
+      wire_len += written;
+      consumed += sealed;
+    }
+    std::vector<uint8_t> got(len + 64 * 1024, 0xaa);
+    size_t in_offset = 0, produced = 0;
+    while (in_offset < wire_len) {
+      auto in =
+          ZeroCopySplit(Span(wire.data() + in_offset, wire_len - in_offset),
+                        1 + (seed >> 4) % 8, &seed);
+      Span<uint8_t> rest_out(got.data() + produced, got.size() - produced);
+      std::vector<CRYPTO_IOVEC> out;
+      for (const CRYPTO_IVEC &frag :
+           ZeroCopySplit(rest_out, 1 + (seed >> 6) % 8, &seed)) {
+        out.push_back({const_cast<uint8_t *>(frag.in), nullptr, frag.len});
+      }
+      size_t opened = 0, read = 0;
+      ASSERT_EQ(ssl_open_v_success,
+                SSL_open_app_datav(server.get(), out.data(), out.size(),
+                                   &opened, &read, in.data(), in.size()));
+      ASSERT_GT(read, 0u);
+      in_offset += read;
+      produced += opened;
+    }
+    ASSERT_EQ(len, produced);
+    ASSERT_EQ(Bytes(plain), Bytes(got.data(), len));
+  }
+  char buf[16];
+  ASSERT_EQ(5, SSL_write(client.get(), "hello", 5));
+  ASSERT_EQ(5, SSL_read(server.get(), buf, sizeof(buf)));
+  ASSERT_EQ(5, SSL_write(server.get(), "world", 5));
+  ASSERT_EQ(5, SSL_read(client.get(), buf, sizeof(buf)));
+}
+
+// A record opened where its ciphertext is, with the output over the input.
+TEST_P(ZeroCopyTest, InPlace) {
+  bssl::UniquePtr<SSL_CTX> client_ctx, server_ctx;
+  bssl::UniquePtr<SSL> client, server;
+  ASSERT_TRUE(
+      ZeroCopyConnect(GetParam(), &client, &server, &client_ctx, &server_ctx));
+  std::vector<uint8_t> plain(40000);
+  for (size_t i = 0; i < plain.size(); i++) {
+    plain[i] = uint8_t(i * 7);
+  }
+  CRYPTO_IVEC plain_in = {plain.data(), plain.size()};
+  std::vector<uint8_t> wire(plain.size() + 4096);
+  size_t written = 0, sealed = 0;
+  ASSERT_EQ(ssl_seal_v_success,
+            SSL_seal_app_datav(client.get(), wire.data(), &written, wire.size(),
+                               &plain_in, 1, &sealed));
+  ASSERT_EQ(plain.size(), sealed);
+  CRYPTO_IVEC in = {wire.data(), written};
+  CRYPTO_IOVEC out = {wire.data(), nullptr, written};
+  size_t produced = 0, consumed = 0;
+  ASSERT_EQ(
+      ssl_open_v_success,
+      SSL_open_app_datav(server.get(), &out, 1, &produced, &consumed, &in, 1));
+  EXPECT_EQ(written, consumed);
+  ASSERT_EQ(plain.size(), produced);
+  EXPECT_EQ(Bytes(plain), Bytes(wire.data(), produced));
+}
+
+// A record longer than the protocol allows fails, as for `SSL_read`, also with
+// room for only one legal record.
+TEST_P(ZeroCopyTest, OversizedRecord) {
+  for (size_t out_size : {size_t{17 * 1024}, size_t{32 * 1024}}) {
+    SCOPED_TRACE(out_size);
+    bssl::UniquePtr<SSL_CTX> client_ctx, server_ctx;
+    bssl::UniquePtr<SSL> client, server;
+    ASSERT_TRUE(ZeroCopyConnect(GetParam(), &client, &server, &client_ctx,
+                                &server_ctx));
+    std::vector<uint8_t> plain(16600, 'x');
+    std::vector<uint8_t> wire(20000);
+    size_t written = 0;
+    ASSERT_TRUE(tls_seal_record(FromOpaque(client.get()), wire.data(), &written,
+                                wire.size(), SSL3_RT_APPLICATION_DATA,
+                                plain.data(), plain.size()));
+    CRYPTO_IVEC in = {wire.data(), written};
+    std::vector<uint8_t> buf(out_size);
+    CRYPTO_IOVEC out = {buf.data(), nullptr, buf.size()};
+    size_t produced = 0, consumed = 0;
+    EXPECT_EQ(ssl_open_v_error,
+              SSL_open_app_datav(server.get(), &out, 1, &produced, &consumed,
+                                 &in, 1));
+  }
+}
+
+// A complete record that needs more output than a call has, before any
+// progress, is told apart from incomplete input; with prior progress the call
+// reports that progress.
+TEST_P(ZeroCopyTest, NeedOutput) {
+  bssl::UniquePtr<SSL_CTX> client_ctx, server_ctx;
+  bssl::UniquePtr<SSL> client, server;
+  ASSERT_TRUE(
+      ZeroCopyConnect(GetParam(), &client, &server, &client_ctx, &server_ctx));
+  std::vector<uint8_t> small(100, 's'), large(3000, 'l');
+  ASSERT_EQ(int(small.size()),
+            SSL_write(server.get(), small.data(), int(small.size())));
+  ASSERT_EQ(int(large.size()),
+            SSL_write(server.get(), large.data(), int(large.size())));
+  auto wire = ZeroCopyDrain(client.get());
+
+  std::vector<uint8_t> buf(SSL3_RT_MAX_ENCRYPTED_LENGTH);
+  CRYPTO_IVEC in = {wire.data(), wire.size()};
+  CRYPTO_IOVEC out = {buf.data(), nullptr, 1024};
+  size_t produced = 0, consumed = 0;
+  ASSERT_EQ(ssl_open_v_success, SSL_open_app_datav(client.get(), &out, 1,
+                                                   &produced, &consumed,
+                                                   &in, 1));
+  EXPECT_EQ(small.size(), produced);
+  ASSERT_GT(consumed, 0u);
+  ASSERT_LT(consumed, wire.size());
+
+  in = {wire.data() + consumed, wire.size() - consumed};
+  size_t produced2 = 0, consumed2 = 0;
+  EXPECT_EQ(ssl_open_v_need_output,
+            SSL_open_app_datav(client.get(), &out, 1, &produced2, &consumed2,
+                               &in, 1));
+  EXPECT_EQ(0u, produced2);
+  EXPECT_EQ(0u, consumed2);
+
+  out.len = buf.size();
+  ASSERT_EQ(ssl_open_v_success, SSL_open_app_datav(client.get(), &out, 1,
+                                                   &produced2, &consumed2,
+                                                   &in, 1));
+  EXPECT_EQ(in.len, consumed2);
+  EXPECT_EQ(Bytes(large), Bytes(buf.data(), produced2));
+}
+
+// A record longer than the protocol allows that the output can't hold is told
+// apart from incomplete input, and fails once the output can hold it, as with
+// `SSL_read`.
+TEST_P(ZeroCopyTest, OversizedRecordNeedsOutput) {
+  bssl::UniquePtr<SSL_CTX> client_ctx, server_ctx;
+  bssl::UniquePtr<SSL> client, server;
+  ASSERT_TRUE(
+      ZeroCopyConnect(GetParam(), &client, &server, &client_ctx, &server_ctx));
+  std::vector<uint8_t> plain(16600, 'x');
+  std::vector<uint8_t> wire(20000);
+  size_t written = 0;
+  ASSERT_TRUE(tls_seal_record(FromOpaque(client.get()), wire.data(), &written,
+                              wire.size(), SSL3_RT_APPLICATION_DATA,
+                              plain.data(), plain.size()));
+  CRYPTO_IVEC in = {wire.data(), written};
+  std::vector<uint8_t> buf(SSL3_RT_MAX_ENCRYPTED_LENGTH);
+  CRYPTO_IOVEC out = {buf.data(), nullptr, SSL3_RT_MAX_PLAIN_LENGTH + 1};
+  size_t produced = 0, consumed = 0;
+  EXPECT_EQ(ssl_open_v_need_output,
+            SSL_open_app_datav(server.get(), &out, 1, &produced, &consumed,
+                               &in, 1));
+  EXPECT_EQ(0u, consumed);
+  out.len = buf.size();
+  EXPECT_EQ(ssl_open_v_error,
+            SSL_open_app_datav(server.get(), &out, 1, &produced, &consumed,
+                               &in, 1));
+}
+
+// Post-handshake messages and close_notify opened through the zero-copy path,
+// with the KeyUpdate reply sealed ahead of the data that follows.
+TEST(ZeroCopyFlowTest, TicketsKeyUpdateAndClose) {
+  bssl::UniquePtr<SSL_CTX> client_ctx, server_ctx;
+  bssl::UniquePtr<SSL> client, server;
+  ASSERT_TRUE(ZeroCopyConnect(ZeroCopyParam{TLS1_3_VERSION, nullptr}, &client,
+                              &server, &client_ctx, &server_ctx));
+  ASSERT_EQ(3, SSL_write(server.get(), "abc", 3));
+  ASSERT_TRUE(SSL_key_update(server.get(), SSL_KEY_UPDATE_REQUESTED));
+  ASSERT_EQ(3, SSL_write(server.get(), "def", 3));
+  auto wire = ZeroCopyDrain(client.get());
+  std::vector<uint8_t> plain;
+  size_t consumed;
+  EXPECT_EQ(ssl_open_v_success,
+            ZeroCopyOpenAll(client.get(), wire, &plain, &consumed));
+  EXPECT_EQ(wire.size(), consumed);
+  EXPECT_EQ(Bytes("abcdef"), Bytes(plain));
+
+  CRYPTO_IVEC in = {reinterpret_cast<const uint8_t *>("xyz"), 3};
+  std::vector<uint8_t> out(4096);
+  size_t written = 0, sealed = 0;
+  ASSERT_EQ(ssl_seal_v_success,
+            SSL_seal_app_datav(client.get(), out.data(), &written, out.size(),
+                               &in, 1, &sealed));
+  EXPECT_EQ(3u, sealed);
+  ASSERT_EQ(int(written),
+            BIO_write(SSL_get_wbio(client.get()), out.data(), int(written)));
+  char buf[16];
+  ASSERT_EQ(3, SSL_read(server.get(), buf, sizeof(buf)));
+  EXPECT_EQ(Bytes("xyz"), Bytes(buf, 3));
+  ASSERT_EQ(2, SSL_write(server.get(), "ok", 2));
+  ASSERT_EQ(2, SSL_read(client.get(), buf, sizeof(buf)));
+
+  SSL_shutdown(server.get());
+  wire = ZeroCopyDrain(client.get());
+  EXPECT_EQ(ssl_open_v_close_notify,
+            ZeroCopyOpenAll(client.get(), wire, &plain, &consumed));
+  EXPECT_EQ(wire.size(), consumed);
+  EXPECT_EQ(0, SSL_read(client.get(), buf, sizeof(buf)));
+}
+
+// Ciphertext that `SSL_read` has buffered must finish through it.
+TEST(ZeroCopyFlowTest, RefuseAfterSSLReadBuffer) {
+  bssl::UniquePtr<SSL_CTX> client_ctx, server_ctx;
+  bssl::UniquePtr<SSL> client, server;
+  ASSERT_TRUE(ZeroCopyConnect(ZeroCopyParam{TLS1_3_VERSION, nullptr}, &client,
+                              &server, &client_ctx, &server_ctx));
+  ASSERT_EQ(3, SSL_write(server.get(), "abc", 3));
+  ASSERT_EQ(3, SSL_write(server.get(), "def", 3));
+  char buf[2];
+  ASSERT_EQ(2, SSL_read(client.get(), buf, 2));
+  uint8_t dummy[64] = {0};
+  CRYPTO_IVEC in = {dummy, sizeof(dummy)};
+  uint8_t plain[64];
+  CRYPTO_IOVEC out = {plain, nullptr, sizeof(plain)};
+  size_t produced, consumed;
+  EXPECT_EQ(
+      ssl_open_v_refused,
+      SSL_open_app_datav(client.get(), &out, 1, &produced, &consumed, &in, 1));
+}
+
+// A record header that `SSL_read` rejects fails as soon as it has arrived, as
+// for `SSL_read`, with the same error, rather than waiting for its body.
+TEST(ZeroCopyFlowTest, BadHeaderBeforeBody) {
+  for (uint16_t body_len : {uint16_t{100}, uint16_t{16704}, uint16_t{0xffff}}) {
+    SCOPED_TRACE(body_len);
+    uint8_t header[SSL3_RT_HEADER_LENGTH] = {SSL3_RT_APPLICATION_DATA, 0x03,
+                                             0x07, uint8_t(body_len >> 8),
+                                             uint8_t(body_len)};
+    uint32_t read_error = 0, open_error = 0;
+    {
+      bssl::UniquePtr<SSL_CTX> client_ctx, server_ctx;
+      bssl::UniquePtr<SSL> client, server;
+      ASSERT_TRUE(ZeroCopyConnect(ZeroCopyParam{TLS1_3_VERSION, nullptr},
+                                  &client, &server, &client_ctx, &server_ctx));
+      ZeroCopyDrain(client.get());
+      ASSERT_EQ(int(sizeof(header)),
+                BIO_write(SSL_get_wbio(client.get()), header, sizeof(header)));
+      char buf[16];
+      ERR_clear_error();
+      ASSERT_EQ(-1, SSL_read(server.get(), buf, sizeof(buf)));
+      ASSERT_EQ(SSL_ERROR_SSL, SSL_get_error(server.get(), -1));
+      read_error = ERR_peek_last_error();
+    }
+    {
+      bssl::UniquePtr<SSL_CTX> client_ctx, server_ctx;
+      bssl::UniquePtr<SSL> client, server;
+      ASSERT_TRUE(ZeroCopyConnect(ZeroCopyParam{TLS1_3_VERSION, nullptr},
+                                  &client, &server, &client_ctx, &server_ctx));
+      ZeroCopyDrain(client.get());
+      CRYPTO_IVEC in = {header, sizeof(header)};
+      uint8_t plain[64];
+      CRYPTO_IOVEC out = {plain, nullptr, sizeof(plain)};
+      size_t produced, consumed;
+      ERR_clear_error();
+      EXPECT_EQ(ssl_open_v_error,
+                SSL_open_app_datav(server.get(), &out, 1, &produced, &consumed,
+                                   &in, 1));
+      open_error = ERR_peek_last_error();
+    }
+    EXPECT_TRUE(ErrorEquals(open_error, ERR_GET_LIB(read_error),
+                            ERR_GET_REASON(read_error)))
+        << ERR_reason_error_string(open_error) << " instead of "
+        << ERR_reason_error_string(read_error);
+  }
+}
+
+// An input fragment in the output that an earlier record of the same call
+// writes is refused before anything is written, as it would otherwise be
+// sealed after the earlier record overwrote it.
+TEST(ZeroCopyFlowTest, InputInEarlierOutput) {
+  bssl::UniquePtr<SSL_CTX> client_ctx, server_ctx;
+  bssl::UniquePtr<SSL> client, server;
+  ASSERT_TRUE(ZeroCopyConnect(ZeroCopyParam{TLS1_3_VERSION, nullptr}, &client,
+                              &server, &client_ctx, &server_ctx));
+  std::vector<uint8_t> first(20000, 'a');
+  std::vector<uint8_t> out(64 * 1024);
+  CRYPTO_IVEC in[2] = {{first.data(), first.size()}, {out.data() + 100, 10}};
+  size_t written = 0, sealed = 0;
+  ERR_clear_error();
+  EXPECT_EQ(ssl_seal_v_error,
+            SSL_seal_app_datav(client.get(), out.data(), &written, out.size(),
+                               in, 2, &sealed));
+  EXPECT_TRUE(ErrorEquals(ERR_peek_last_error(), ERR_LIB_SSL,
+                          SSL_R_OUTPUT_ALIASES_INPUT));
+  EXPECT_EQ(0u, written);
+  EXPECT_EQ(0u, sealed);
+}
+
+struct ZeroCopyRecord {
+  uint8_t type;
+  std::vector<uint8_t> body;
+};
+
+static std::vector<uint8_t> ZeroCopySeal(
+    SSL *client, const std::vector<ZeroCopyRecord> &records) {
+  std::vector<uint8_t> wire;
+  for (const ZeroCopyRecord &record : records) {
+    std::vector<uint8_t> buf(record.body.size() + 1024);
+    size_t written = 0;
+    EXPECT_TRUE(tls_seal_record(FromOpaque(client), buf.data(), &written,
+                                buf.size(), record.type, record.body.data(),
+                                record.body.size()));
+    wire.insert(wire.end(), buf.begin(), buf.begin() + written);
+  }
+  return wire;
+}
+
+// What reading `records` gives: the data, the error and the alert.
+static std::string ZeroCopyOutcome(uint16_t version, const char *cipher,
+                                   const std::vector<ZeroCopyRecord> &records,
+                                   bool zero_copy) {
+  bssl::UniquePtr<SSL_CTX> client_ctx, server_ctx;
+  bssl::UniquePtr<SSL> client, server;
+  if (!ZeroCopyConnect(ZeroCopyParam{version, cipher}, &client, &server,
+                       &client_ctx, &server_ctx)) {
+    return "connect";
+  }
+  ZeroCopyDrain(client.get());
+  auto wire = ZeroCopySeal(client.get(), records);
+  ERR_clear_error();
+  std::vector<uint8_t> plain;
+  int error;
+  if (zero_copy) {
+    size_t consumed;
+    auto result = ZeroCopyOpenAll(server.get(), wire, &plain, &consumed);
+    error = result == ssl_open_v_error          ? SSL_ERROR_SSL
+            : result == ssl_open_v_close_notify ? SSL_ERROR_ZERO_RETURN
+                                                : SSL_ERROR_WANT_READ;
+  } else {
+    BIO_write(SSL_get_wbio(client.get()), wire.data(), int(wire.size()));
+    std::vector<uint8_t> buf(32768);
+    int ret;
+    while ((ret = SSL_read(server.get(), buf.data(), int(buf.size()))) > 0) {
+      plain.insert(plain.end(), buf.begin(), buf.begin() + ret);
+    }
+    error = SSL_get_error(server.get(), ret);
+  }
+  uint32_t err = error == SSL_ERROR_SSL ? ERR_peek_last_error() : 0;
+  ZeroCopyDrain(server.get());
+  auto alert = ZeroCopyDrain(client.get());
+  char out[256];
+  snprintf(out, sizeof(out), "data=%zu err=%d reason=%s alertbytes=%zu",
+           plain.size(), error, err ? ERR_reason_error_string(err) : "none",
+           alert.size());
+  return out;
+}
+
+// Malformed and unusual records give what `SSL_read` gives. In TLS 1.2 a
+// handshake record from the client is renegotiation, which Malterlib keeps off,
+// where the zero-copy path can fail with another error, so there both only
+// fail with an alert.
+TEST(ZeroCopyFlowTest, SameAsSSLRead) {
+  auto data = [](const char *str) {
+    return std::vector<uint8_t>(str, str + strlen(str));
+  };
+  std::vector<uint8_t> empty;
+  std::vector<std::pair<const char *, std::vector<ZeroCopyRecord>>> cases = {
+      {"data", {{23, data("hello")}}},
+      {"warning user_canceled", {{21, {1, 90}}, {23, data("x")}}},
+      {"warning other", {{21, {1, 42}}}},
+      {"fatal", {{21, {2, 40}}}},
+      {"close", {{23, data("x")}, {21, {1, 0}}, {23, data("y")}}},
+      {"alert of 3 bytes", {{21, {1, 0, 0}}}},
+      {"empty alert", {{21, {}}}},
+      {"change cipher spec", {{20, {1}}}},
+      {"type 0", {{0, data("ab")}}},
+      {"empty type 0", {{0, {}}}},
+      {"unknown type", {{99, data("ab")}}},
+      {"33 empty", std::vector<ZeroCopyRecord>(33, ZeroCopyRecord{23, {}})},
+      {"32 empty then data",
+       [&] {
+         auto records = std::vector<ZeroCopyRecord>(32, ZeroCopyRecord{23, {}});
+         records.push_back({23, data("z")});
+         return records;
+       }()},
+      {"partial handshake then data",
+       {{22, {4, 0, 0, 10, 1}}, {23, data("x")}}},
+      {"partial handshake then alert", {{22, {4, 0, 0, 10, 1}}, {21, {1, 90}}}},
+      {"bad key update", {{22, {24, 0, 0, 1, 7}}}},
+      {"key update and more", {{22, {24, 0, 0, 1, 0, 24, 0}}}},
+      {"unexpected handshake message", {{22, {1, 0, 0, 0}}}},
+      {"huge handshake message", {{22, {4, 0xff, 0xff, 0xff}}}},
+      {"33 empty handshake",
+       std::vector<ZeroCopyRecord>(33, ZeroCopyRecord{22, {}})},
+      {"16385 bytes", {{23, std::vector<uint8_t>(16385, 'a')}}},
+      {"16386 bytes", {{23, std::vector<uint8_t>(16386, 'a')}}},
+  };
+  for (uint16_t version : {TLS1_3_VERSION, TLS1_2_VERSION}) {
+    for (const char *cipher :
+         {"ECDHE-RSA-AES128-GCM-SHA256", "ECDHE-RSA-AES128-SHA"}) {
+      for (const auto &c : cases) {
+        SCOPED_TRACE(c.first);
+        SCOPED_TRACE(cipher);
+        SCOPED_TRACE(version);
+        std::string read = ZeroCopyOutcome(version, cipher, c.second, false);
+        std::string open = ZeroCopyOutcome(version, cipher, c.second, true);
+        bool renegotiation = false;
+        for (const ZeroCopyRecord &record : c.second) {
+          renegotiation |=
+              version == TLS1_2_VERSION && record.type == SSL3_RT_HANDSHAKE;
+        }
+        if (renegotiation) {
+          EXPECT_EQ(read.substr(0, read.find(" reason=")),
+                    open.substr(0, open.find(" reason=")));
+          EXPECT_EQ(read.substr(read.find(" alertbytes=")),
+                    open.substr(open.find(" alertbytes=")));
+        } else {
+          EXPECT_EQ(read, open);
+        }
+      }
+      if (version == TLS1_3_VERSION) {
+        break;
+      }
+    }
+  }
+}
+
 }  // namespace
 BSSL_NAMESPACE_END
