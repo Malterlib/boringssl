@@ -530,6 +530,8 @@ SSL *SSL_new(SSL_CTX *ctx) {
   ssl->config->aes_hw_override = ctx_impl->aes_hw_override;
   ssl->config->aes_hw_override_value = ctx_impl->aes_hw_override_value;
   ssl->config->compliance_policy = ctx_impl->compliance_policy;
+  ssl->config->min_tls13_cipher_bits = ctx_impl->min_tls13_cipher_bits;
+  ssl->config->prefer_high_strength_tls13 = ctx_impl->prefer_high_strength_tls13;
 
   if (!ssl->config->supported_group_list.CopyFrom(
           ctx_impl->supported_group_list) ||
@@ -2629,6 +2631,16 @@ const char *SSL_get_cipher_list(const SSL *ssl, int n) {
   }
 
   return c->name;
+}
+
+int SSL_CTX_set_tls13_cipher_policy(SSL_CTX *ctx, unsigned bits, int prefer_high_strength) {
+  if (bits > 256) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_NO_CIPHER_MATCH);
+    return 0;
+  }
+  FromOpaque(ctx)->min_tls13_cipher_bits = bits;
+  FromOpaque(ctx)->prefer_high_strength_tls13 = prefer_high_strength != 0;
+  return 1;
 }
 
 int SSL_CTX_set_cipher_list(SSL_CTX *ctx, const char *str) {

@@ -602,7 +602,14 @@ class CNsaCipherScorer : public CipherScorer {
 }  // namespace
 
 bool ssl_tls13_cipher_meets_policy(uint16_t cipher_id,
-                                   enum ssl_compliance_policy_t policy) {
+                                   enum ssl_compliance_policy_t policy,
+                                   unsigned min_cipher_bits) {
+  const SSL_CIPHER *cipher = SSL_get_cipher_by_value(cipher_id);
+  if (cipher == nullptr ||
+      SSL_CIPHER_get_bits(cipher, nullptr) < static_cast<int>(min_cipher_bits)) {
+    return false;
+  }
+
   switch (policy) {
     case ssl_compliance_policy_none:
     case ssl_compliance_policy_cnsa_202407:
@@ -641,7 +648,9 @@ bool ssl_tls13_cipher_meets_policy(uint16_t cipher_id,
 
 const SSL_CIPHER *ssl_choose_tls13_cipher(CBS cipher_suites, bool has_aes_hw,
                                           uint16_t version,
-                                          enum ssl_compliance_policy_t policy) {
+                                          enum ssl_compliance_policy_t policy,
+                                          unsigned min_cipher_bits,
+                                          bool prefer_high_strength) {
   if (CBS_len(&cipher_suites) % 2 != 0) {
     return nullptr;
   }
@@ -670,11 +679,15 @@ const SSL_CIPHER *ssl_choose_tls13_cipher(CBS cipher_suites, bool has_aes_hw,
     }
 
     if (!ssl_tls13_cipher_meets_policy(SSL_CIPHER_get_protocol_id(candidate),
-                                       policy)) {
+                                       policy, min_cipher_bits)) {
       continue;
     }
 
-    const CipherScorer::Score candidate_score = scorer->Evaluate(candidate);
+    const CipherScorer::Score candidate_score =
+        scorer->Evaluate(candidate) +
+        ((prefer_high_strength && policy != ssl_compliance_policy_cnsa_202407)
+             ? SSL_CIPHER_get_bits(candidate, nullptr)
+             : 0);
     // `candidate_score` must be larger to displace the current choice. That way
     // the client's order controls between ciphers with an equal score.
     if (candidate_score > best_score) {

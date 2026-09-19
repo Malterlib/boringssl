@@ -148,7 +148,9 @@ static const SSL_CIPHER *choose_tls13_cipher(
                                  ssl->config->aes_hw_override
                                      ? ssl->config->aes_hw_override_value
                                      : EVP_has_aes_hardware(),
-                                 version, ssl->config->compliance_policy);
+                                 version, ssl->config->compliance_policy,
+                                 ssl->config->min_tls13_cipher_bits,
+                                 ssl->config->prefer_high_strength_tls13);
 }
 
 static bool add_new_session_tickets(SSL_HANDSHAKE *hs, bool *out_sent_tickets) {

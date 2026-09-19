@@ -84,8 +84,9 @@ static void ssl_get_client_disabled(const SSL_HANDSHAKE *hs,
 }
 
 static bool ssl_add_tls13_cipher(CBB *cbb, uint16_t cipher_id,
-                                 ssl_compliance_policy_t policy) {
-  if (ssl_tls13_cipher_meets_policy(cipher_id, policy)) {
+                                 ssl_compliance_policy_t policy,
+                                 unsigned min_cipher_bits) {
+  if (ssl_tls13_cipher_meets_policy(cipher_id, policy, min_cipher_bits)) {
     return CBB_add_u16(cbb, cipher_id);
   }
   return true;
@@ -121,6 +122,11 @@ static bool ssl_write_client_cipher_list(const SSL_HANDSHAKE *hs, CBB *out,
         SSL_CIPHER_AES_128_GCM_SHA256,
         SSL_CIPHER_CHACHA20_POLY1305_SHA256,
     };
+    static const uint16_t kCiphersStrongAESHardware[] = {
+        SSL_CIPHER_AES_256_GCM_SHA384,
+        SSL_CIPHER_CHACHA20_POLY1305_SHA256,
+        SSL_CIPHER_AES_128_GCM_SHA256,
+    };
     static const uint16_t kCiphersCNSA[] = {
         SSL_CIPHER_AES_256_GCM_SHA384,
         SSL_CIPHER_AES_128_GCM_SHA256,
@@ -133,12 +139,16 @@ static bool ssl_write_client_cipher_list(const SSL_HANDSHAKE *hs, CBB *out,
     const bssl::Span<const uint16_t> ciphers =
         ssl->config->compliance_policy == ssl_compliance_policy_cnsa_202407
             ? bssl::Span<const uint16_t>(kCiphersCNSA)
+        : ssl->config->prefer_high_strength_tls13
+            ? (has_aes_hw ? bssl::Span<const uint16_t>(kCiphersStrongAESHardware)
+                          : bssl::Span<const uint16_t>(kCiphersNoAESHardware))
             : (has_aes_hw ? bssl::Span<const uint16_t>(kCiphersAESHardware)
                           : bssl::Span<const uint16_t>(kCiphersNoAESHardware));
 
     for (auto cipher : ciphers) {
       if (!ssl_add_tls13_cipher(&child, cipher,
-                                ssl->config->compliance_policy)) {
+                                ssl->config->compliance_policy,
+                                ssl->config->min_tls13_cipher_bits)) {
         return false;
       }
     }

@@ -1739,6 +1739,16 @@ OPENSSL_EXPORT int SSL_CTX_set_strict_cipher_list(SSL_CTX *ctx,
 // garbage inputs, unless an empty cipher list results.
 OPENSSL_EXPORT int SSL_CTX_set_cipher_list(SSL_CTX *ctx, const char *str);
 
+// SSL_CTX_set_tls13_cipher_policy filters the TLS 1.3 cipher suites advertised
+// and accepted by connections created from `ctx`. Ciphers with fewer than `bits`
+// encryption-key bits are disabled. Zero restores the default (no filter).
+// If `prefer_high_strength` is nonzero (the default), prefer larger encryption
+// keys before applying the normal hardware-dependent preference order. Explicit
+// compliance policies retain any cipher ordering they require.
+// This does not constrain authentication tags, hashes, key exchange, or
+// certificates. It returns one on success, or zero if `bits` exceeds 256.
+OPENSSL_EXPORT int SSL_CTX_set_tls13_cipher_policy(SSL_CTX *ctx, unsigned bits, int prefer_high_strength);
+
 // SSL_set_strict_cipher_list configures the cipher list for `ssl`, evaluating
 // `str` as a cipher string and returning error if `str` contains anything
 // meaningless. It returns one on success and zero on failure.

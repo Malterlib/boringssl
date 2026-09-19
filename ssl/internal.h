@@ -359,12 +359,15 @@ size_t ssl_cipher_get_record_split_len(const SSL_CIPHER *cipher);
 // the choice should be made as if support for AES in hardware is available.
 const SSL_CIPHER *ssl_choose_tls13_cipher(CBS cipher_suites, bool has_aes_hw,
                                           uint16_t version,
-                                          enum ssl_compliance_policy_t policy);
+                                          enum ssl_compliance_policy_t policy,
+                                          unsigned min_cipher_bits,
+                                          bool prefer_high_strength);
 
 // ssl_tls13_cipher_meets_policy returns true if `cipher_id` is acceptable given
 // `policy`.
 bool ssl_tls13_cipher_meets_policy(uint16_t cipher_id,
-                                   enum ssl_compliance_policy_t policy);
+                                   enum ssl_compliance_policy_t policy,
+                                   unsigned min_cipher_bits);
 
 // ssl_cipher_is_deprecated returns true if `cipher` is deprecated.
 bool ssl_cipher_is_deprecated(const SSL_CIPHER *cipher);
@@ -3745,6 +3748,10 @@ struct SSL_CONFIG {
   // negotiating a TLS 1.3 connection.
   enum ssl_compliance_policy_t compliance_policy = ssl_compliance_policy_none;
 
+  // min_tls13_cipher_bits is the minimum encryption-key size for TLS 1.3.
+  unsigned min_tls13_cipher_bits = 0;
+  bool prefer_high_strength_tls13 = true;
+
   // server_padding_request, if set by the client, indicates that the client
   // will ask the server to include additional padding in the
   // EncryptedExtensions message of a TLS 1.3 connection.
@@ -4420,6 +4427,10 @@ class SSLContext : public ssl_ctx_st, public RefCounted<SSLContext> {
   // compliance_policy limits the set of ciphers that can be selected when
   // negotiating a TLS 1.3 connection.
   enum ssl_compliance_policy_t compliance_policy = ssl_compliance_policy_none;
+
+  // min_tls13_cipher_bits is the minimum encryption-key size for TLS 1.3.
+  unsigned min_tls13_cipher_bits = 0;
+  bool prefer_high_strength_tls13 = true;
 
   // verify_sigalgs, if not empty, is the set of signature algorithms
   // accepted from the peer in decreasing order of preference.
