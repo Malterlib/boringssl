@@ -16,6 +16,7 @@
 
 #include <assert.h>
 
+#include <algorithm>
 #include <iterator>
 
 #include <openssl/bytestring.h>
@@ -236,6 +237,53 @@ bool ssl_get_version_range(const SSL_HANDSHAKE *hs, uint16_t *out_min_version,
   if (!any_enabled) {
     OPENSSL_PUT_ERROR(SSL, SSL_R_NO_SUPPORTED_VERSIONS_ENABLED);
     return false;
+  }
+
+  // The minimum strength of TLS 1.3 ciphers can remove all of them, and then
+  // only earlier versions can be negotiated. Without an earlier version, the
+  // handshake reports that no ciphers are available.
+  //
+  // The certificate, server name and OCSP callbacks of a server run after the
+  // version is negotiated and can still set the ciphers, so with any of them
+  // TLS 1.3 stays: a callback that leaves the ciphers below the minimum fails
+  // the handshake, as the version can't change after them. A PAKE credential
+  // requires TLS 1.3, as earlier versions would authenticate with certificates
+  // alone, and so does a usable ECH configuration of a client, as TLS 1.2 would
+  // send the server name in the clear. Those report that no ciphers are
+  // available instead. A server that also has a certificate serves clients
+  // without the PAKE too, so it can still negotiate an earlier version.
+  if (max_version >= TLS1_3_VERSION && min_version < TLS1_3_VERSION) {
+    bool any_tls13_cipher = false;
+    for (const SSL_CIPHER *cipher : hs->config->tls13_cipher_list.ciphers()) {
+      if (SSL_CIPHER_get_bits(cipher, nullptr) >=
+          static_cast<int>(hs->config->min_tls13_cipher_bits)) {
+        any_tls13_cipher = true;
+        break;
+      }
+    }
+    if (!any_tls13_cipher) {
+      const auto *ssl = hs->ssl;
+      const auto &creds = hs->config->cert->credentials;
+      const auto is_pake = [](const auto &cred) {
+        return cred->type == SSLCredentialType::kSPAKE2PlusV1Client ||
+               cred->type == SSLCredentialType::kSPAKE2PlusV1Server;
+      };
+      const bool has_pake = std::any_of(creds.begin(), creds.end(), is_pake);
+      const bool has_certificate =
+          !std::all_of(creds.begin(), creds.end(), is_pake) ||
+          hs->config->cert->legacy_credential->IsComplete();
+      const bool requires_pake = has_pake && !(ssl->server && has_certificate);
+      const bool keeps_tls13 =
+          requires_pake ||
+          (ssl->server ? hs->config->cert->cert_cb ||
+                             ssl->ctx->servername_callback != nullptr ||
+                             ssl->session_ctx->servername_callback != nullptr ||
+                             ssl->ctx->legacy_ocsp_callback != nullptr
+                       : ssl_has_usable_ech_config(hs));
+      if (!keeps_tls13) {
+        max_version = TLS1_2_VERSION;
+      }
+    }
   }
 
   *out_min_version = min_version;

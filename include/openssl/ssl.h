@@ -1810,6 +1810,27 @@ OPENSSL_EXPORT int SSL_CTX_set_strict_cipher_list(SSL_CTX *ctx,
 // garbage inputs, unless an empty cipher list results.
 OPENSSL_EXPORT int SSL_CTX_set_cipher_list(SSL_CTX *ctx, const char *str);
 
+// SSL_CTX_set_tls13_cipher_policy filters the TLS 1.3 cipher suites advertised
+// and accepted by connections created from `ctx`. Ciphers with fewer than `bits`
+// encryption-key bits are disabled. Zero restores the default (no filter).
+// If `prefer_high_strength` is nonzero (the default), prefer larger encryption
+// keys before the order of the TLS 1.3 cipher list (see
+// `SSL_CTX_set1_tls13_ciphers`). Configured groups of equally preferred
+// ciphers, and those of compliance policies, stay together and are ordered by
+// their largest key. The groups of the default list and of the FIPS 2022-05
+// compliance policy, which only defer to the peer, split by key size. The
+// CNSA 2024-07 compliance policy keeps the order it requires.
+//
+// When `bits` disables every TLS 1.3 cipher and TLS 1.2 is enabled, TLS 1.2 is
+// negotiated. A server with a certificate, server name or OCSP callback keeps
+// TLS 1.3, as the callback can still set its ciphers, and fails the handshake
+// if they are still below the minimum. A client with a usable ECH
+// configuration keeps TLS 1.3, which ECH requires, and fails with
+// `SSL_R_NO_CIPHERS_AVAILABLE`.
+// This does not constrain authentication tags, hashes, key exchange, or
+// certificates. It returns one on success, or zero if `bits` exceeds 256.
+OPENSSL_EXPORT int SSL_CTX_set_tls13_cipher_policy(SSL_CTX *ctx, unsigned bits, int prefer_high_strength);
+
 // SSL_set_strict_cipher_list configures the cipher list for `ssl`, evaluating
 // `str` as a cipher string and returning error if `str` contains anything
 // meaningless. It returns one on success and zero on failure.

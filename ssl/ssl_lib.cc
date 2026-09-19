@@ -509,6 +509,8 @@ SSL *SSL_new(SSL_CTX *ctx) {
       ctx_impl->retain_only_sha256_of_client_certs;
   ssl->config->permute_extensions = ctx_impl->permute_extensions;
   ssl->config->compliance_policy = ctx_impl->compliance_policy;
+  ssl->config->min_tls13_cipher_bits = ctx_impl->min_tls13_cipher_bits;
+  ssl->config->prefer_high_strength_tls13 = ctx_impl->prefer_high_strength_tls13;
 
   if (!ssl->config->tls13_cipher_list.CopyFrom(ctx_impl->tls13_cipher_list)) {
     return nullptr;
@@ -2677,6 +2679,16 @@ const char *SSL_get_cipher_list(const SSL *ssl, int n) {
   return c->name;
 }
 
+int SSL_CTX_set_tls13_cipher_policy(SSL_CTX *ctx, unsigned bits, int prefer_high_strength) {
+  if (bits > 256) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_NO_CIPHER_MATCH);
+    return 0;
+  }
+  FromOpaque(ctx)->min_tls13_cipher_bits = bits;
+  FromOpaque(ctx)->prefer_high_strength_tls13 = prefer_high_strength != 0;
+  return 1;
+}
+
 int SSL_CTX_set_cipher_list(SSL_CTX *ctx, const char *str) {
   auto *ctx_impl = FromOpaque(ctx);
   return ssl_create_cipher_list(&ctx_impl->cipher_list, str,
@@ -4007,9 +4019,11 @@ static const char kTLS12Ciphers[] =
     "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:"
     "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384";
 
+// AES-256-GCM first for a client, as before this list. A server defers to the
+// client, as the suites are in one group.
 static const uint16_t kTLS13Ciphers[] = {
-    SSL_CIPHER_AES_128_GCM_SHA256,
     SSL_CIPHER_AES_256_GCM_SHA384,
+    SSL_CIPHER_AES_128_GCM_SHA256,
 };
 static const bool kTLS13CiphersInGroup[] = {
     true,
@@ -4032,7 +4046,7 @@ static int Configure(SSLContext *ctx) {
       // Encrypt-then-MAC extension is required for all CBC cipher suites and so
       // it's easier to drop them.
       SSL_CTX_set_strict_cipher_list(ctx, kTLS12Ciphers) &&
-      ctx->tls13_cipher_list.Init(Span(kTLS13Ciphers),
+      ctx->tls13_cipher_list.InitGroupsDeferToPeer(Span(kTLS13Ciphers),
                                   Span(kTLS13CiphersInGroup)) &&
       SSL_CTX_set1_group_ids(ctx, kGroups, std::size(kGroups)) &&
       SSL_CTX_set_signing_algorithm_prefs(ctx, kSigAlgs, std::size(kSigAlgs)) &&
@@ -4046,7 +4060,7 @@ static int Configure(SSLImpl *ssl) {
   return SSL_set_min_proto_version(ssl, TLS1_2_VERSION) &&
          SSL_set_max_proto_version(ssl, TLS1_3_VERSION) &&
          SSL_set_strict_cipher_list(ssl, kTLS12Ciphers) &&
-         ssl->config->tls13_cipher_list.Init(Span(kTLS13Ciphers),
+         ssl->config->tls13_cipher_list.InitGroupsDeferToPeer(Span(kTLS13Ciphers),
                                              Span(kTLS13CiphersInGroup)) &&
          SSL_set1_group_ids(ssl, kGroups, std::size(kGroups)) &&
          SSL_set_signing_algorithm_prefs(ssl, kSigAlgs, std::size(kSigAlgs)) &&
@@ -4096,9 +4110,14 @@ static const char kTLS12Ciphers[] =
     "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:"
     "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384";
 
+// AES-256-GCM first for a client, as for FIPS 2022-05. The suites are an
+// equal preference group, which the strength preference keeps together, so a
+// server defers to the client, as the runner's
+// Compliance-fips-202609-*-CipherEquipreference tests require. Unlike FIPS
+// 2022-05, the group isn't split by key size.
 static const uint16_t kTLS13Ciphers[] = {
-    SSL_CIPHER_AES_128_GCM_SHA256,
     SSL_CIPHER_AES_256_GCM_SHA384,
+    SSL_CIPHER_AES_128_GCM_SHA256,
 };
 static const bool kTLS13CiphersInGroup[] = {
     true,
@@ -4217,14 +4236,14 @@ static const bool kTLS13CiphersInGroup[] = {
 
 static int Configure(SSLContext *ctx) {
   ctx->compliance_policy = ssl_compliance_policy_cnsa_202407;
-  return ctx->tls13_cipher_list.Init(Span(kTLS13Ciphers),
-                                     Span(kTLS13CiphersInGroup));
+  return ctx->tls13_cipher_list.InitRequiredOrder(Span(kTLS13Ciphers),
+                                                  Span(kTLS13CiphersInGroup));
 }
 
 static int Configure(SSLImpl *ssl) {
   ssl->config->compliance_policy = ssl_compliance_policy_cnsa_202407;
-  return ssl->config->tls13_cipher_list.Init(Span(kTLS13Ciphers),
-                                             Span(kTLS13CiphersInGroup));
+  return ssl->config->tls13_cipher_list.InitRequiredOrder(
+      Span(kTLS13Ciphers), Span(kTLS13CiphersInGroup));
 }
 
 }  // namespace cnsa202407

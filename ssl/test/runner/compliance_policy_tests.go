@@ -445,5 +445,20 @@ func addCompliancePolicyTests() {
 			},
 			expectations: connectionExpectations{cipher: TLS_AES_256_GCM_SHA384},
 		})
+
+		// As a client, the FIPS policies offer AES-256-GCM first.
+		for _, policy := range []string{"-fips-202205", "-fips-202609"} {
+			testCases = append(testCases, testCase{
+				protocol: protocol,
+				name:     "Compliance" + policy + "-" + protocol.String() + "-Client-PrefersAES-256",
+				config: Config{
+					MinVersion:               VersionTLS13,
+					MaxVersion:               VersionTLS13,
+					PreferServerCipherSuites: false,
+				},
+				flags:        []string{policy},
+				expectations: connectionExpectations{cipher: TLS_AES_256_GCM_SHA384},
+			})
+		}
 	}
 }

@@ -650,6 +650,40 @@ static bool select_ech_cipher_suite(const EVP_HPKE_KDF **out_kdf,
   return true;
 }
 
+bool ssl_has_usable_ech_config(const SSL_HANDSHAKE *hs) {
+  if (hs->config->client_ech_config_list.empty()) {
+    return false;
+  }
+  CBS cbs = CBS(hs->config->client_ech_config_list);
+  CBS child;
+  if (!CBS_get_u16_length_prefixed(&cbs, &child) ||  //
+      CBS_len(&child) == 0 ||                        //
+      CBS_len(&cbs) > 0) {
+    // `ssl_select_ech_config` reports the error.
+    return true;
+  }
+  // `ssl_select_ech_config` parses the list again and reports its errors, so
+  // the errors of a failure here, as of an allocation, are dropped.
+  ERR_set_mark();
+  while (CBS_len(&child) > 0) {
+    ECHConfig ech_config;
+    bool supported;
+    if (!parse_ech_config(&child, &ech_config, &supported,
+                          /*all_extensions_mandatory=*/false)) {
+      ERR_pop_to_mark();
+      return true;
+    }
+    const EVP_HPKE_KDF *kdf;
+    const EVP_HPKE_AEAD *aead;
+    if (supported &&  //
+        ech_config.kem_id == EVP_HPKE_DHKEM_X25519_HKDF_SHA256 &&
+        select_ech_cipher_suite(&kdf, &aead, ech_config.cipher_suites)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool ssl_select_ech_config(SSL_HANDSHAKE *hs, Span<uint8_t> out_enc,
                            size_t *out_enc_len) {
   *out_enc_len = 0;
