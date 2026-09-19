@@ -755,7 +755,8 @@ namespace internal {
 
 // MutexLockBase is a RAII helper for locking a mutex. The mutex type is a
 // parameter because `Mutex` and `StaticMutex` may be unrelated types.
-template <typename Mu, void (Mu::*LockMethod)(), void (Mu::*ReleaseMethod)()>
+// The methods are `auto` so they may be inherited from a base of `Mu`.
+template <typename Mu, auto LockMethod, auto ReleaseMethod>
 class MutexLockBase {
  public:
   explicit MutexLockBase(Mu *mu) : mu_(mu) {
@@ -803,6 +804,15 @@ class MutexReadUnlock
   explicit MutexReadUnlock(Mu *mu)
       : internal::MutexLockBase<Mu, &Mu::UnlockRead, &Mu::LockRead>(mu) {}
 };
+
+template <typename Mu>
+MutexWriteLock(Mu *) -> MutexWriteLock<Mu>;
+template <typename Mu>
+MutexReadLock(Mu *) -> MutexReadLock<Mu>;
+template <typename Mu>
+MutexWriteUnlock(Mu *) -> MutexWriteUnlock<Mu>;
+template <typename Mu>
+MutexReadUnlock(Mu *) -> MutexReadUnlock<Mu>;
 
 
 // Thread local storage.
