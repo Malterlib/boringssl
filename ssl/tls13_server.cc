@@ -399,9 +399,16 @@ static enum ssl_hs_wait_t do_select_parameters(SSL_HANDSHAKE *hs) {
   CBS client_cipher_list;
   CBS_init(&client_cipher_list, client_hello.cipher_suites,
            client_hello.cipher_suites_len);
-  hs->new_cipher = ssl->config->tls13_cipher_list.ChooseCipher(
-      &client_cipher_list, /*prioritize_client_pref=*/false,
-      ssl_protocol_version(ssl), SSL_kGENERIC, SSL_aGENERIC);
+  TLS13CipherList tls13_cipher_list;
+  if (!ssl_apply_tls13_cipher_policy(ssl->config->tls13_cipher_list,
+                                     ssl->config->min_tls13_cipher_bits,
+                                     ssl->config->prefer_high_strength_tls13,
+                                     &tls13_cipher_list)) {
+    ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
+    return ssl_hs_error;
+  }
+  hs->new_cipher = ssl_choose_tls13_cipher(
+      tls13_cipher_list, &client_cipher_list, ssl_protocol_version(ssl));
   if (hs->new_cipher == nullptr) {
     OPENSSL_PUT_ERROR(SSL, SSL_R_NO_SHARED_CIPHER);
     ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_HANDSHAKE_FAILURE);

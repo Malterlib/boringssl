@@ -357,6 +357,18 @@ static constexpr SSL_CIPHER kCiphers[] = {
 
 };
 
+static constexpr size_t CountTLS13Ciphers() {
+  size_t count = 0;
+  for (const SSL_CIPHER &cipher : kCiphers) {
+    if (cipher.algorithm_mkey == SSL_kGENERIC) {
+      count++;
+    }
+  }
+  return count;
+}
+static_assert(CountTLS13Ciphers() == kMaxTLS13Ciphers,
+              "kMaxTLS13Ciphers must be the number of TLS 1.3 ciphers");
+
 Span<const SSL_CIPHER> AllCiphers() { return kCiphers; }
 
 namespace {
@@ -642,6 +654,25 @@ bool SSLCipherPreferenceList::Init(UniquePtr<STACK_OF(SSL_CIPHER)> ciphers,
 
   ciphers_ = std::move(ciphers);
   in_group_flags_ = std::move(in_group_flags);
+  order_ = Order::kConfigured;
+  return true;
+}
+
+bool SSLCipherPreferenceList::InitGroupsDeferToPeer(
+    Span<const uint16_t> cipher_ids, Span<const bool> in_group_flags) {
+  if (!Init(cipher_ids, in_group_flags)) {
+    return false;
+  }
+  order_ = Order::kDefersToPeer;
+  return true;
+}
+
+bool SSLCipherPreferenceList::InitRequiredOrder(
+    Span<const uint16_t> cipher_ids, Span<const bool> in_group_flags) {
+  if (!Init(cipher_ids, in_group_flags)) {
+    return false;
+  }
+  order_ = Order::kRequired;
   return true;
 }
 
@@ -678,6 +709,7 @@ bool SSLCipherPreferenceList::Init(Span<const uint16_t> cipher_ids,
 void SSLCipherPreferenceList::Reset() {
   sk_SSL_CIPHER_zero(ciphers_.get());
   in_group_flags_.Reset();
+  order_ = Order::kConfigured;
 }
 
 bool SSLCipherPreferenceList::CopyFrom(const SSLCipherPreferenceList &other) {
@@ -690,7 +722,11 @@ bool SSLCipherPreferenceList::CopyFrom(const SSLCipherPreferenceList &other) {
   if (!other_flags.CopyFrom(other.in_group_flags())) {
     return false;
   }
-  return Init(std::move(other_ciphers), std::move(other_flags));
+  if (!Init(std::move(other_ciphers), std::move(other_flags))) {
+    return false;
+  }
+  order_ = other.order_;
+  return true;
 }
 
 void SSLCipherPreferenceList::Remove(const SSL_CIPHER *cipher) {
@@ -717,9 +753,15 @@ bool SSLCipherPreferenceList::Contains(uint16_t cipher_id) const {
   return false;
 }
 
-const SSL_CIPHER *SSLCipherPreferenceList::ChooseCipher(
-    const CBS *client_cipher_list, bool prioritize_client_pref,
-    uint16_t version, uint32_t mask_k, uint32_t mask_a) const {
+// ChooseCipherIn implements `SSLCipherPreferenceList::ChooseCipher` for the
+// `size` ciphers that `get_cipher` returns by index and their `in_group_flags`.
+template <typename GetCipher>
+static const SSL_CIPHER *ChooseCipherIn(size_t size, GetCipher get_cipher,
+                                        Span<const bool> in_group_flags,
+                                        const CBS *client_cipher_list,
+                                        bool prioritize_client_pref,
+                                        uint16_t version, uint32_t mask_k,
+                                        uint32_t mask_a) {
   if (CBS_len(client_cipher_list) % 2 != 0) {
     OPENSSL_PUT_ERROR(SSL, SSL_R_ERROR_IN_RECEIVED_CIPHER_LIST);
     return nullptr;
@@ -732,14 +774,14 @@ const SSL_CIPHER *SSLCipherPreferenceList::ChooseCipher(
 
   // Iterate over our list (the server preference list) and check for each
   // cipher in the client's list.
-  for (size_t i = 0; i < size(); ++i) {
-    const SSL_CIPHER *const c = sk_SSL_CIPHER_value(ciphers_.get(), i);
-    bool in_group = in_group_flags_[i];
+  for (size_t i = 0; i < size; ++i) {
+    const SSL_CIPHER *const c = get_cipher(i);
+    bool in_group = in_group_flags[i];
     // If prioritizing the client preference list, treat all of the server's
     // allowed ciphers as a single equipreference group so that the client's
     // preferences dictate the choice.
     if (prioritize_client_pref) {
-      in_group = (i < size() - 1);
+      in_group = (i < size - 1);
     }
 
     if (version >= SSL_CIPHER_get_min_version(c) &&
@@ -776,6 +818,26 @@ const SSL_CIPHER *SSLCipherPreferenceList::ChooseCipher(
   assert(best_cipher == nullptr);
   OPENSSL_PUT_ERROR(SSL, SSL_R_NO_SHARED_CIPHER);
   return nullptr;
+}
+
+const SSL_CIPHER *SSLCipherPreferenceList::ChooseCipher(
+    const CBS *client_cipher_list, bool prioritize_client_pref,
+    uint16_t version, uint32_t mask_k, uint32_t mask_a) const {
+  return ChooseCipherIn(
+      size(),
+      [&](size_t i) { return sk_SSL_CIPHER_value(ciphers_.get(), i); },
+      in_group_flags_, client_cipher_list, prioritize_client_pref, version,
+      mask_k, mask_a);
+}
+
+const SSL_CIPHER *ssl_choose_tls13_cipher(const TLS13CipherList &cipher_list,
+                                          const CBS *client_cipher_list,
+                                          uint16_t version) {
+  return ChooseCipherIn(
+      cipher_list.ciphers.size(),
+      [&](size_t i) { return cipher_list.ciphers[i]; },
+      Span(cipher_list.in_group_flags), client_cipher_list,
+      /*prioritize_client_pref=*/false, version, SSL_kGENERIC, SSL_aGENERIC);
 }
 
 bool ssl_cipher_is_deprecated(const SSL_CIPHER *cipher) {
@@ -1286,6 +1348,9 @@ bool ssl_create_default_tls13_cipher_list(
   // For a client: AES-256 > AES-128 > ChaCha20.
   // For a server: (AES-256 | AES-128 | ChaCha20), i.e. defer to client
   // preference.
+  // The strength preference of `SSL_CTX_set_tls13_cipher_policy`, which is on
+  // by default, splits the group by key size, so a client prefers
+  // AES-256 > ChaCha20 > AES-128 and a server (AES-256 | ChaCha20) > AES-128.
   static const uint16_t kCiphersAESHardware[] = {
       SSL_CIPHER_AES_256_GCM_SHA384,
       SSL_CIPHER_AES_128_GCM_SHA256,
@@ -1299,6 +1364,7 @@ bool ssl_create_default_tls13_cipher_list(
   // If we do not have AES hardware:
   // For a client: ChaCha20 > AES-256 > AES-128.
   // For a server: ChaCha20 > (AES-256 | AES-128).
+  // With the strength preference, both prefer ChaCha20 > AES-256 > AES-128.
   static const uint16_t kCiphersNoAESHardware[] = {
       SSL_CIPHER_CHACHA20_POLY1305_SHA256,
       SSL_CIPHER_AES_256_GCM_SHA384,
@@ -1318,7 +1384,80 @@ bool ssl_create_default_tls13_cipher_list(
                                         : Span(kInGroupFlagsNoAESHardware);
 
   out_cipher_list->Reset();
-  return out_cipher_list->Init(ciphers, in_group_flags);
+  return out_cipher_list->InitGroupsDeferToPeer(ciphers, in_group_flags);
+}
+
+bool ssl_apply_tls13_cipher_policy(const SSLCipherPreferenceList &cipher_list,
+                                   unsigned min_cipher_bits,
+                                   bool prefer_high_strength,
+                                   TLS13CipherList *out_cipher_list) {
+  struct Entry {
+    const SSL_CIPHER *cipher;
+    size_t group;
+    int bits;
+    int sort_bits;
+  };
+
+  // Each handshake applies the policy, so the lists are in place
+  InplaceVector<Entry, kMaxTLS13Ciphers> entries;
+  const Span<const bool> in_group_flags = cipher_list.in_group_flags();
+  size_t group = 0;
+  for (size_t i = 0; i < cipher_list.size(); i++) {
+    const SSL_CIPHER *cipher = sk_SSL_CIPHER_value(cipher_list.ciphers(), i);
+    const int bits = SSL_CIPHER_get_bits(cipher, nullptr);
+    if (bits >= static_cast<int>(min_cipher_bits) &&
+        !entries.TryPushBack(Entry{cipher, group, bits, bits})) {
+      OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+      return false;
+    }
+    if (!in_group_flags[i]) {
+      group++;
+    }
+  }
+
+  // CNSA 2024-07 requires AES-256-GCM before AES-128-GCM before anything else,
+  // which its list already has. A list that replaces it is sorted again.
+  const bool sort_by_strength =
+      prefer_high_strength && !cipher_list.required_order();
+  // The groups of built-in lists that only defer to the peer split by key size.
+  // Configured groups and those that a compliance policy requires, such as the
+  // equally preferred AES-GCM suites of FIPS 2026-09, stay together and are
+  // ordered by their largest key.
+  const bool split_groups =
+      sort_by_strength && cipher_list.groups_defer_to_peer();
+  if (sort_by_strength) {
+    for (Entry &entry : entries) {
+      for (const Entry &other : entries) {
+        if (!split_groups && other.group == entry.group &&
+            other.bits > entry.sort_bits) {
+          entry.sort_bits = other.bits;
+        }
+      }
+    }
+    // A stable insertion sort, which does not allocate outside OPENSSL_malloc.
+    for (size_t i = 1; i < entries.size(); i++) {
+      const Entry entry = entries[i];
+      size_t j = i;
+      for (; j > 0 && entries[j - 1].sort_bits < entry.sort_bits; j--) {
+        entries[j] = entries[j - 1];
+      }
+      entries[j] = entry;
+    }
+  }
+
+  out_cipher_list->ciphers.clear();
+  out_cipher_list->in_group_flags.clear();
+  for (size_t i = 0; i < entries.size(); i++) {
+    const bool in_group =
+        i + 1 < entries.size() && entries[i].group == entries[i + 1].group &&
+        (!split_groups || entries[i].bits == entries[i + 1].bits);
+    if (!out_cipher_list->ciphers.TryPushBack(entries[i].cipher) ||
+        !out_cipher_list->in_group_flags.TryPushBack(in_group)) {
+      OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+      return false;
+    }
+  }
+  return true;
 }
 
 uint32_t ssl_cipher_auth_mask_for_key(const EVP_PKEY *key, bool sign_ok) {

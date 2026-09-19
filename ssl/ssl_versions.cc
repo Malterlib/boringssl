@@ -16,6 +16,7 @@
 
 #include <assert.h>
 
+#include <algorithm>
 #include <iterator>
 
 #include <openssl/bytestring.h>
@@ -236,6 +237,76 @@ bool ssl_get_version_range(const SSL_HANDSHAKE *hs, uint16_t *out_min_version,
   if (!any_enabled) {
     OPENSSL_PUT_ERROR(SSL, SSL_R_NO_SUPPORTED_VERSIONS_ENABLED);
     return false;
+  }
+
+  // The minimum strength of TLS 1.3 ciphers can remove all of them, and then
+  // only earlier versions can be negotiated. Without an earlier version, the
+  // handshake reports that no ciphers are available.
+  //
+  // The certificate, server name and OCSP callbacks of a server run after the
+  // version is negotiated and can still set the ciphers, so with any of them
+  // TLS 1.3 stays: a callback that leaves the ciphers below the minimum fails
+  // the handshake, as the version can't change after them. A usable ECH
+  // configuration of a client keeps TLS 1.3, as TLS 1.2 would send the server
+  // name in the clear, and its ClientHelloInner reports that no ciphers are
+  // available. The credentials that don't use a private key, PAKEs and external
+  // pre-shared keys, only work in TLS 1.3, so a client that only accepts the
+  // server's authentication with them, as `ssl_accepts_server_certificate_auth`
+  // decides, and a server that has no other credential and none of those
+  // callbacks negotiate nothing earlier either: a client reports that no
+  // ciphers are available and a server that it shares none. A server that also
+  // has a certificate or a TLS 1.2 PSK callback serves clients without those
+  // credentials, so it can still negotiate an earlier version.
+  if (max_version >= TLS1_3_VERSION && min_version < TLS1_3_VERSION) {
+    bool any_tls13_cipher = false;
+    for (const SSL_CIPHER *cipher : hs->config->tls13_cipher_list.ciphers()) {
+      if (SSL_CIPHER_get_bits(cipher, nullptr) >=
+          static_cast<int>(hs->config->min_tls13_cipher_bits)) {
+        any_tls13_cipher = true;
+        break;
+      }
+    }
+    if (!any_tls13_cipher) {
+      const auto *ssl = hs->ssl;
+      const auto &creds = hs->config->cert->credentials;
+      const auto is_tls13_only = [](const auto &cred) {
+        return !cred->UsesPrivateKey();
+      };
+      const auto is_pake = [](const auto &cred) {
+        return cred->type == SSLCredentialType::kSPAKE2PlusV1Client ||
+               cred->type == SSLCredentialType::kSPAKE2PlusV1Server;
+      };
+      bool requires_tls13;
+      if (ssl->server) {
+        // A TLS 1.2 PSK callback authenticates in TLS 1.2 too
+        const bool authenticates_tls12 =
+            !std::all_of(creds.begin(), creds.end(), is_tls13_only) ||
+            hs->config->cert->legacy_credential->IsComplete() ||
+            hs->config->psk_server_callback != nullptr;
+        requires_tls13 =
+            std::any_of(creds.begin(), creds.end(), is_tls13_only) &&
+            !authenticates_tls12;
+      } else {
+        // The ClientHello sets up the PAKE that
+        // `ssl_accepts_server_certificate_auth` checks for, and a PAKE accepts
+        // no certificates whatever the verify mode.
+        requires_tls13 = std::any_of(creds.begin(), creds.end(), is_pake) ||
+                         !ssl_accepts_server_certificate_auth(hs);
+      }
+      const bool server_callbacks =
+          ssl->server && (hs->config->cert->cert_cb ||
+                          ssl->ctx->servername_callback != nullptr ||
+                          ssl->session_ctx->servername_callback != nullptr ||
+                          ssl->ctx->legacy_ocsp_callback != nullptr);
+      const bool keeps_tls13 =
+          requires_tls13 || server_callbacks ||
+          (!ssl->server && ssl_has_usable_ech_config(hs));
+      if (!keeps_tls13) {
+        max_version = TLS1_2_VERSION;
+      } else if (requires_tls13 && !server_callbacks) {
+        min_version = TLS1_3_VERSION;
+      }
+    }
   }
 
   *out_min_version = min_version;

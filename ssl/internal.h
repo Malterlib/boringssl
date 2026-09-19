@@ -332,6 +332,19 @@ class SSLCipherPreferenceList {
   const STACK_OF(SSL_CIPHER) *ciphers() const { return ciphers_.get(); }
   Span<const bool> in_group_flags() const { return in_group_flags_; }
 
+  // Same as above, for a built-in list whose groups only defer to the peer, as
+  // of `ssl_create_default_tls13_cipher_list`, rather than express an equal
+  // preference that a configured list or a compliance policy requires.
+  bool InitGroupsDeferToPeer(Span<const uint16_t> cipher_ids,
+                             Span<const bool> in_group_flags);
+  bool groups_defer_to_peer() const { return order_ == Order::kDefersToPeer; }
+
+  // Same as above, for a list whose order a compliance policy requires, as of
+  // CNSA 2024-07, which a preference for stronger ciphers keeps.
+  bool InitRequiredOrder(Span<const uint16_t> cipher_ids,
+                         Span<const bool> in_group_flags);
+  bool required_order() const { return order_ == Order::kRequired; }
+
   // TODO(crbug.com/550501994): Remove the non-const overload. This may result
   // in callers mutating the internal state in an inconsistent way.
   STACK_OF(SSL_CIPHER) *ciphers() { return ciphers_.get(); }
@@ -341,6 +354,8 @@ class SSLCipherPreferenceList {
   // form required for `SSL{_CTX}_get_ciphers`.
   UniquePtr<STACK_OF(SSL_CIPHER)> ciphers_;
   Array<bool> in_group_flags_;
+  enum class Order { kConfigured, kDefersToPeer, kRequired };
+  Order order_ = Order::kConfigured;
 };
 
 // AllCiphers returns an array of all supported ciphers, sorted by id.
@@ -378,6 +393,34 @@ bool ssl_create_cipher_list(UniquePtr<SSLCipherPreferenceList> *out_cipher_list,
 // not.
 bool ssl_create_default_tls13_cipher_list(
     SSLCipherPreferenceList *out_cipher_list);
+
+// kMaxTLS13Ciphers is the number of TLS 1.3 ciphers, which a TLS 1.3 cipher
+// list has at most once each.
+inline constexpr size_t kMaxTLS13Ciphers = 3;
+
+// TLS13CipherList is a TLS 1.3 cipher list that a handshake uses without
+// allocating, with the equipreference groups of `SSLCipherPreferenceList`.
+struct TLS13CipherList {
+  InplaceVector<const SSL_CIPHER *, kMaxTLS13Ciphers> ciphers;
+  InplaceVector<bool, kMaxTLS13Ciphers> in_group_flags;
+};
+
+// ssl_apply_tls13_cipher_policy sets `*out_cipher_list` to `cipher_list`
+// without the ciphers that have fewer than `min_cipher_bits` encryption-key
+// bits. If `prefer_high_strength` is true and the order of `cipher_list` is not
+// required by a compliance policy, ciphers with larger encryption keys come
+// first, and otherwise keep their order and equipreference groups. It returns
+// true on success and false on failure.
+bool ssl_apply_tls13_cipher_policy(const SSLCipherPreferenceList &cipher_list,
+                                   unsigned min_cipher_bits,
+                                   bool prefer_high_strength,
+                                   TLS13CipherList *out_cipher_list);
+
+// ssl_choose_tls13_cipher behaves like `SSLCipherPreferenceList::ChooseCipher`
+// for the server preference list `cipher_list`.
+const SSL_CIPHER *ssl_choose_tls13_cipher(const TLS13CipherList &cipher_list,
+                                          const CBS *client_cipher_list,
+                                          uint16_t version);
 
 // ssl_cipher_auth_mask_for_key returns the mask of cipher `algorithm_auth`
 // values suitable for use with `key` in TLS 1.2 and below. `sign_ok` indicates
@@ -1664,6 +1707,11 @@ bool ssl_is_valid_ech_public_name(Span<const uint8_t> public_name);
 // ssl_is_valid_ech_config_list returns true if `ech_config_list` is a valid
 // ECHConfigList structure and false otherwise.
 bool ssl_is_valid_ech_config_list(Span<const uint8_t> ech_config_list);
+
+// ssl_has_usable_ech_config returns whether the ECHConfigList of the client
+// has an ECHConfig that `ssl_select_ech_config` would select, or is one that it
+// reports an error for.
+bool ssl_has_usable_ech_config(const SSL_HANDSHAKE *hs);
 
 // ssl_select_ech_config selects an ECHConfig and associated parameters to offer
 // on the client and updates `hs`. It returns true on success, whether an
@@ -3758,6 +3806,10 @@ struct SSL_CONFIG {
   // negotiating a TLS 1.3 connection.
   enum ssl_compliance_policy_t compliance_policy = ssl_compliance_policy_none;
 
+  // min_tls13_cipher_bits is the minimum encryption-key size for TLS 1.3.
+  unsigned min_tls13_cipher_bits = 0;
+  bool prefer_high_strength_tls13 = true;
+
   // server_padding_request, if set by the client, indicates that the client
   // will ask the server to include additional padding in the
   // EncryptedExtensions message of a TLS 1.3 connection.
@@ -4396,6 +4448,10 @@ class SSLContext : public ssl_ctx_st, public RefCounted<SSLContext> {
   // compliance_policy limits the set of ciphers that can be selected when
   // negotiating a TLS 1.3 connection.
   enum ssl_compliance_policy_t compliance_policy = ssl_compliance_policy_none;
+
+  // min_tls13_cipher_bits is the minimum encryption-key size for TLS 1.3.
+  unsigned min_tls13_cipher_bits = 0;
+  bool prefer_high_strength_tls13 = true;
 
   // verify_sigalgs, if not empty, is the set of signature algorithms
   // accepted from the peer in decreasing order of preference.

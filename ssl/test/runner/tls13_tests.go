@@ -2348,6 +2348,8 @@ func addTLS13CipherPreferenceTests() {
 		},
 	})
 
+	// With AES hardware, the default preference for stronger suites picks the
+	// 256-bit ChaCha20-Poly1305 over the client's AES-128-GCM.
 	testCases = append(testCases, testCase{
 		testType: serverTest,
 		name:     "TLS13-CipherPreference-Server-AES-ChaCha20",
@@ -2360,7 +2362,7 @@ func addTLS13CipherPreferenceTests() {
 			CurvePreferences: []CurveID{CurveX25519},
 		},
 		flags: []string{
-			"-expect-cipher-aes", strconv.Itoa(int(TLS_AES_128_GCM_SHA256)),
+			"-expect-cipher-aes", strconv.Itoa(int(TLS_CHACHA20_POLY1305_SHA256)),
 			"-expect-cipher-no-aes", strconv.Itoa(int(TLS_CHACHA20_POLY1305_SHA256)),
 		},
 	})

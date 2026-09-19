@@ -101,8 +101,17 @@ static bool ssl_write_client_cipher_list(const SSL_HANDSHAKE *hs, CBB *out,
   }
 
   // Add TLS 1.3 ciphers in configured preference order.
+  bool any_enabled = false;
   if (hs->max_version >= TLS1_3_VERSION) {
-    for (const SSL_CIPHER *cipher : hs->config->tls13_cipher_list.ciphers()) {
+    TLS13CipherList tls13_cipher_list;
+    if (!ssl_apply_tls13_cipher_policy(hs->config->tls13_cipher_list,
+                                       hs->config->min_tls13_cipher_bits,
+                                       hs->config->prefer_high_strength_tls13,
+                                       &tls13_cipher_list)) {
+      return false;
+    }
+    for (const SSL_CIPHER *cipher : tls13_cipher_list.ciphers) {
+      any_enabled = true;
       if (!CBB_add_u16(&child, SSL_CIPHER_get_protocol_id(cipher))) {
         return false;
       }
@@ -110,7 +119,6 @@ static bool ssl_write_client_cipher_list(const SSL_HANDSHAKE *hs, CBB *out,
   }
 
   if (hs->min_version < TLS1_3_VERSION && type != ssl_client_hello_inner) {
-    bool any_enabled = false;
     for (const SSL_CIPHER *cipher : SSL_get_ciphers(ssl)) {
       // Skip disabled ciphers
       if ((cipher->algorithm_mkey & mask_k) ||
@@ -126,12 +134,13 @@ static bool ssl_write_client_cipher_list(const SSL_HANDSHAKE *hs, CBB *out,
         return false;
       }
     }
+  }
 
-    // If all ciphers were disabled, return the error to the caller.
-    if (!any_enabled && hs->max_version < TLS1_3_VERSION) {
-      OPENSSL_PUT_ERROR(SSL, SSL_R_NO_CIPHERS_AVAILABLE);
-      return false;
-    }
+  // If all ciphers were disabled, return the error to the caller. The minimum
+  // strength of TLS 1.3 ciphers can disable all of those too.
+  if (!any_enabled) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_NO_CIPHERS_AVAILABLE);
+    return false;
   }
 
   if (ssl->mode & SSL_MODE_SEND_FALLBACK_SCSV) {
@@ -260,6 +269,21 @@ static ssl_early_data_reason_t should_offer_early_data(
   if (ssl_session_protocol_version(ssl->session.get()) < TLS1_3_VERSION ||
       ssl->session->ticket_max_early_data == 0) {
     return ssl_early_data_unsupported_for_session;
+  }
+
+  // The early data keys come from the cipher of the session, which the cipher
+  // policy of this connection has to allow, as for the ciphers that it offers.
+  {
+    TLS13CipherList tls13_cipher_list;
+    if (!ssl_apply_tls13_cipher_policy(hs->config->tls13_cipher_list,
+                                       hs->config->min_tls13_cipher_bits,
+                                       hs->config->prefer_high_strength_tls13,
+                                       &tls13_cipher_list) ||
+        std::find(tls13_cipher_list.ciphers.begin(),
+                  tls13_cipher_list.ciphers.end(),
+                  ssl->session->cipher) == tls13_cipher_list.ciphers.end()) {
+      return ssl_early_data_unsupported_for_session;
+    }
   }
 
   if (!ssl->session->early_alpn.empty()) {

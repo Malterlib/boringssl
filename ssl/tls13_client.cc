@@ -209,7 +209,9 @@ static enum ssl_hs_wait_t do_read_hello_retry_request(SSL_HANDSHAKE *hs) {
   if (cipher == nullptr ||
       SSL_CIPHER_get_min_version(cipher) > ssl_protocol_version(ssl) ||
       SSL_CIPHER_get_max_version(cipher) < ssl_protocol_version(ssl) ||
-      !ssl->config->tls13_cipher_list.Contains(server_hello.cipher_suite)) {
+      !ssl->config->tls13_cipher_list.Contains(server_hello.cipher_suite) ||
+      SSL_CIPHER_get_bits(cipher, nullptr) <
+          static_cast<int>(ssl->config->min_tls13_cipher_bits)) {
     OPENSSL_PUT_ERROR(SSL, SSL_R_WRONG_CIPHER_RETURNED);
     ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_ILLEGAL_PARAMETER);
     return ssl_hs_error;

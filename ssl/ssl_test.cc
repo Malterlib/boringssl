@@ -4354,6 +4354,281 @@ static int SwitchSessionIDContextSNI(SSL *ssl, int *out_alert, void *arg) {
   return SSL_TLSEXT_ERR_OK;
 }
 
+// The client's TLS 1.3 cipher suites, in the order of its ClientHello.
+static bool GetClientTLS13Ciphers(SSL_CTX *ctx, std::vector<uint16_t> *out) {
+  bssl::UniquePtr<SSL> ssl(SSL_new(ctx));
+  std::vector<uint8_t> record;
+  // A record header and a handshake message header precede the ClientHello.
+  constexpr size_t kHeaders = 5 + 4;
+  if (!ssl || !GetClientHello(ssl.get(), &record) ||
+      record.size() < kHeaders) {
+    return false;
+  }
+  SSL_CLIENT_HELLO client_hello;
+  if (!SSL_parse_client_hello(ssl.get(), &client_hello,
+                              record.data() + kHeaders,
+                              record.size() - kHeaders)) {
+    return false;
+  }
+  out->clear();
+  CBS ciphers;
+  CBS_init(&ciphers, client_hello.cipher_suites,
+           client_hello.cipher_suites_len);
+  while (CBS_len(&ciphers) > 0) {
+    uint16_t id;
+    if (!CBS_get_u16(&ciphers, &id)) {
+      return false;
+    }
+    out->push_back(id);
+  }
+  return true;
+}
+
+// Resetting the TLS 1.3 ciphers after CNSA 2024-07 restores the built-in list,
+// which the preference for stronger ciphers sorts again.
+// When the minimum strength removes every configured TLS 1.3 cipher, TLS 1.3
+// is not negotiated and an earlier version is, on either side.
+TEST(SSLTest, TLS13CiphersBelowMinimumStrength) {
+  static const uint16_t kAES128[] = {SSL_CIPHER_AES_128_GCM_SHA256};
+  for (bool filter_client : {false, true}) {
+    SCOPED_TRACE(filter_client);
+    bssl::UniquePtr<SSL_CTX> client_ctx(SSL_CTX_new(TLS_method()));
+    bssl::UniquePtr<SSL_CTX> server_ctx =
+        CreateContextWithTestCertificate(TLS_method());
+    ASSERT_TRUE(client_ctx);
+    ASSERT_TRUE(server_ctx);
+    SSL_CTX *filtered = filter_client ? client_ctx.get() : server_ctx.get();
+    ASSERT_TRUE(SSL_CTX_set1_tls13_ciphers(filtered, kAES128, nullptr,
+                                           std::size(kAES128)));
+    ASSERT_TRUE(SSL_CTX_set_tls13_cipher_policy(filtered, 256, 1));
+
+    bssl::UniquePtr<SSL> client, server;
+    ASSERT_TRUE(ConnectClientAndServer(&client, &server, client_ctx.get(),
+                                       server_ctx.get()));
+    EXPECT_EQ(SSL_version(client.get()), TLS1_2_VERSION);
+  }
+}
+
+// A certificate callback of a server can set TLS 1.3 ciphers that meet the
+// minimum strength, which the context's ciphers don't.
+TEST(SSLTest, TLS13CiphersFromCertificateCallback) {
+  static const uint16_t kAES128[] = {SSL_CIPHER_AES_128_GCM_SHA256};
+  bssl::UniquePtr<SSL_CTX> client_ctx(SSL_CTX_new(TLS_method()));
+  bssl::UniquePtr<SSL_CTX> server_ctx =
+      CreateContextWithTestCertificate(TLS_method());
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(server_ctx);
+  ASSERT_TRUE(SSL_CTX_set1_tls13_ciphers(server_ctx.get(), kAES128, nullptr,
+                                         std::size(kAES128)));
+  ASSERT_TRUE(SSL_CTX_set_tls13_cipher_policy(server_ctx.get(), 256, 1));
+  SSL_CTX_set_cert_cb(
+      server_ctx.get(),
+      [](SSL *ssl, void *arg) -> int {
+        static const uint16_t kAES256[] = {SSL_CIPHER_AES_256_GCM_SHA384};
+        return SSL_set1_tls13_ciphers(ssl, kAES256, nullptr,
+                                      std::size(kAES256));
+      },
+      nullptr);
+
+  bssl::UniquePtr<SSL> client, server;
+  ASSERT_TRUE(ConnectClientAndServer(&client, &server, client_ctx.get(),
+                                     server_ctx.get()));
+  EXPECT_EQ(SSL_version(client.get()), TLS1_3_VERSION);
+  EXPECT_EQ(SSL_CIPHER_get_protocol_id(SSL_get_current_cipher(client.get())),
+            SSL_CIPHER_AES_256_GCM_SHA384);
+}
+
+// The same for a server name callback.
+TEST(SSLTest, TLS13CiphersFromServerNameCallback) {
+  static const uint16_t kAES128[] = {SSL_CIPHER_AES_128_GCM_SHA256};
+  bssl::UniquePtr<SSL_CTX> client_ctx(SSL_CTX_new(TLS_method()));
+  bssl::UniquePtr<SSL_CTX> server_ctx =
+      CreateContextWithTestCertificate(TLS_method());
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(server_ctx);
+  ASSERT_TRUE(SSL_CTX_set1_tls13_ciphers(server_ctx.get(), kAES128, nullptr,
+                                         std::size(kAES128)));
+  ASSERT_TRUE(SSL_CTX_set_tls13_cipher_policy(server_ctx.get(), 256, 1));
+  SSL_CTX_set_tlsext_servername_callback(
+      server_ctx.get(), [](SSL *ssl, int *alert, void *arg) -> int {
+        static const uint16_t kAES256[] = {SSL_CIPHER_AES_256_GCM_SHA384};
+        return SSL_set1_tls13_ciphers(ssl, kAES256, nullptr, std::size(kAES256))
+                   ? SSL_TLSEXT_ERR_OK
+                   : SSL_TLSEXT_ERR_ALERT_FATAL;
+      });
+
+  ClientConfig config;
+  config.servername = "example.com";
+  bssl::UniquePtr<SSL> client, server;
+  ASSERT_TRUE(ConnectClientAndServer(&client, &server, client_ctx.get(),
+                                     server_ctx.get(), config));
+  EXPECT_EQ(SSL_version(client.get()), TLS1_3_VERSION);
+  EXPECT_EQ(SSL_CIPHER_get_protocol_id(SSL_get_current_cipher(client.get())),
+            SSL_CIPHER_AES_256_GCM_SHA384);
+}
+
+// The same for an OCSP callback.
+TEST(SSLTest, TLS13CiphersFromOCSPCallback) {
+  static const uint16_t kAES128[] = {SSL_CIPHER_AES_128_GCM_SHA256};
+  bssl::UniquePtr<SSL_CTX> client_ctx(SSL_CTX_new(TLS_method()));
+  bssl::UniquePtr<SSL_CTX> server_ctx =
+      CreateContextWithTestCertificate(TLS_method());
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(server_ctx);
+  SSL_CTX_enable_ocsp_stapling(client_ctx.get());
+  ASSERT_TRUE(SSL_CTX_set1_tls13_ciphers(server_ctx.get(), kAES128, nullptr,
+                                         std::size(kAES128)));
+  ASSERT_TRUE(SSL_CTX_set_tls13_cipher_policy(server_ctx.get(), 256, 1));
+  SSL_CTX_set_tlsext_status_cb(server_ctx.get(), [](SSL *ssl, void *arg) -> int {
+    static const uint16_t kAES256[] = {SSL_CIPHER_AES_256_GCM_SHA384};
+    return SSL_set1_tls13_ciphers(ssl, kAES256, nullptr, std::size(kAES256))
+               ? SSL_TLSEXT_ERR_NOACK
+               : SSL_TLSEXT_ERR_ALERT_FATAL;
+  });
+
+  bssl::UniquePtr<SSL> client, server;
+  ASSERT_TRUE(ConnectClientAndServer(&client, &server, client_ctx.get(),
+                                     server_ctx.get()));
+  EXPECT_EQ(SSL_version(client.get()), TLS1_3_VERSION);
+  EXPECT_EQ(SSL_CIPHER_get_protocol_id(SSL_get_current_cipher(client.get())),
+            SSL_CIPHER_AES_256_GCM_SHA384);
+}
+
+// A client with an ECH configuration doesn't fall back to TLS 1.2, which would
+// send the server name in the clear, when its TLS 1.3 ciphers are below the
+// minimum strength.
+TEST(SSLTest, TLS13CiphersBelowMinimumStrengthWithECH) {
+  static const uint16_t kAES128[] = {SSL_CIPHER_AES_128_GCM_SHA256};
+  bssl::UniquePtr<SSL_CTX> client_ctx(SSL_CTX_new(TLS_method()));
+  bssl::UniquePtr<SSL_CTX> server_ctx =
+      CreateContextWithTestCertificate(TLS_method());
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(server_ctx);
+  bssl::UniquePtr<SSL_ECH_KEYS> keys = MakeTestECHKeys();
+  ASSERT_TRUE(keys);
+  ASSERT_TRUE(SSL_CTX_set1_ech_keys(server_ctx.get(), keys.get()));
+  ASSERT_TRUE(SSL_CTX_set1_tls13_ciphers(client_ctx.get(), kAES128, nullptr,
+                                         std::size(kAES128)));
+  ASSERT_TRUE(SSL_CTX_set_tls13_cipher_policy(client_ctx.get(), 256, 1));
+
+  bssl::UniquePtr<SSL> client, server;
+  ASSERT_TRUE(CreateClientAndServer(&client, &server, client_ctx.get(),
+                                    server_ctx.get()));
+  ASSERT_TRUE(InstallECHConfigList(client.get(), keys.get()));
+  EXPECT_FALSE(CompleteHandshakes(client.get(), server.get()));
+  EXPECT_TRUE(ErrorEquals(ERR_get_error(), ERR_LIB_SSL,
+                          SSL_R_NO_CIPHERS_AVAILABLE));
+}
+
+// An ECH configuration that the client can't use doesn't keep TLS 1.3.
+TEST(SSLTest, TLS13CiphersBelowMinimumStrengthWithUnusableECH) {
+  static const uint16_t kAES128[] = {SSL_CIPHER_AES_128_GCM_SHA256};
+  bssl::UniquePtr<SSL_CTX> client_ctx(SSL_CTX_new(TLS_method()));
+  bssl::UniquePtr<SSL_CTX> server_ctx =
+      CreateContextWithTestCertificate(TLS_method());
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(server_ctx);
+  ASSERT_TRUE(SSL_CTX_set1_tls13_ciphers(client_ctx.get(), kAES128, nullptr,
+                                         std::size(kAES128)));
+  ASSERT_TRUE(SSL_CTX_set_tls13_cipher_policy(client_ctx.get(), 256, 1));
+
+  bssl::ScopedEVP_HPKE_KEY key;
+  ASSERT_TRUE(EVP_HPKE_KEY_generate(key.get(), EVP_hpke_x25519_hkdf_sha256()));
+  ECHConfigParams unsupported_version;
+  unsupported_version.version = 0xffff;
+  unsupported_version.key = key.get();
+  std::vector<uint8_t> ech_config;
+  ASSERT_TRUE(MakeECHConfig(&ech_config, unsupported_version));
+  bssl::ScopedCBB cbb;
+  CBB list;
+  ASSERT_TRUE(CBB_init(cbb.get(), 0));
+  ASSERT_TRUE(CBB_add_u16_length_prefixed(cbb.get(), &list));
+  ASSERT_TRUE(CBB_add_bytes(&list, ech_config.data(), ech_config.size()));
+  ASSERT_TRUE(CBB_flush(cbb.get()));
+
+  bssl::UniquePtr<SSL> client, server;
+  ASSERT_TRUE(CreateClientAndServer(&client, &server, client_ctx.get(),
+                                    server_ctx.get()));
+  ASSERT_TRUE(SSL_set1_ech_config_list(client.get(), CBB_data(cbb.get()),
+                                       CBB_len(cbb.get())));
+  ASSERT_TRUE(CompleteHandshakes(client.get(), server.get()));
+  EXPECT_EQ(SSL_version(client.get()), TLS1_2_VERSION);
+}
+
+// A client doesn't send early data under the cipher of a session that its
+// cipher policy doesn't allow, as the ciphers that it offers would not include
+// it.
+TEST(SSLTest, TLS13EarlyDataBelowMinimumStrength) {
+  static const uint16_t kAES128[] = {SSL_CIPHER_AES_128_GCM_SHA256};
+  bssl::UniquePtr<SSL_CTX> client_ctx(SSL_CTX_new(TLS_method()));
+  bssl::UniquePtr<SSL_CTX> server_ctx =
+      CreateContextWithTestCertificate(TLS_method());
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(server_ctx);
+  SSL_CTX_set_early_data_enabled(client_ctx.get(), 1);
+  SSL_CTX_set_early_data_enabled(server_ctx.get(), 1);
+  SSL_CTX_set_session_cache_mode(client_ctx.get(), SSL_SESS_CACHE_BOTH);
+  SSL_CTX_set_session_cache_mode(server_ctx.get(), SSL_SESS_CACHE_BOTH);
+  SSL_CTX_set_custom_verify(client_ctx.get(), SSL_VERIFY_PEER,
+                            AcceptAnyCertificate);
+  ASSERT_TRUE(SSL_CTX_set1_tls13_ciphers(server_ctx.get(), kAES128, nullptr,
+                                         std::size(kAES128)));
+  bssl::UniquePtr<SSL_SESSION> session =
+      CreateClientSession(client_ctx.get(), server_ctx.get());
+  ASSERT_TRUE(session);
+  ASSERT_EQ(SSL_CIPHER_AES_128_GCM_SHA256,
+            SSL_CIPHER_get_protocol_id(SSL_SESSION_get0_cipher(session.get())));
+
+  for (unsigned min_cipher_bits : {128u, 256u}) {
+    SCOPED_TRACE(min_cipher_bits);
+    ASSERT_TRUE(
+        SSL_CTX_set_tls13_cipher_policy(client_ctx.get(), min_cipher_bits, 1));
+    bssl::UniquePtr<SSL> client, server;
+    ASSERT_TRUE(CreateClientAndServer(&client, &server, client_ctx.get(),
+                                      server_ctx.get()));
+    SSL_set_session(client.get(), session.get());
+    SSL_set_early_data_enabled(client.get(), 1);
+    int ret = SSL_do_handshake(client.get());
+    if (min_cipher_bits == 128) {
+      EXPECT_EQ(1, ret);
+      EXPECT_TRUE(SSL_in_early_data(client.get()));
+    } else {
+      EXPECT_NE(1, ret);
+      EXPECT_FALSE(SSL_in_early_data(client.get()));
+      EXPECT_EQ(ssl_early_data_unsupported_for_session,
+                SSL_get_early_data_reason(client.get()));
+    }
+  }
+}
+
+TEST(SSLTest, TLS13CiphersResetAfterRequiredOrder) {
+  bssl::UniquePtr<SSL_CTX> fresh(SSL_CTX_new(TLS_method()));
+  ASSERT_TRUE(fresh);
+  ASSERT_TRUE(SSL_CTX_set_min_proto_version(fresh.get(), TLS1_3_VERSION));
+  std::vector<uint16_t> fresh_ciphers;
+  ASSERT_TRUE(GetClientTLS13Ciphers(fresh.get(), &fresh_ciphers));
+
+  bssl::UniquePtr<SSL_CTX> reset(SSL_CTX_new(TLS_method()));
+  ASSERT_TRUE(reset);
+  ASSERT_TRUE(SSL_CTX_set_compliance_policy(reset.get(),
+                                            ssl_compliance_policy_cnsa_202407));
+  ASSERT_TRUE(SSL_CTX_set_min_proto_version(reset.get(), TLS1_3_VERSION));
+  std::vector<uint16_t> cnsa_ciphers;
+  ASSERT_TRUE(GetClientTLS13Ciphers(reset.get(), &cnsa_ciphers));
+  ASSERT_TRUE(SSL_CTX_set1_tls13_ciphers(reset.get(), nullptr, nullptr, 0));
+  std::vector<uint16_t> reset_ciphers;
+  ASSERT_TRUE(GetClientTLS13Ciphers(reset.get(), &reset_ciphers));
+
+  EXPECT_EQ(cnsa_ciphers,
+            (std::vector<uint16_t>{SSL_CIPHER_AES_256_GCM_SHA384,
+                                   SSL_CIPHER_AES_128_GCM_SHA256,
+                                   SSL_CIPHER_CHACHA20_POLY1305_SHA256}));
+  EXPECT_EQ(reset_ciphers, fresh_ciphers);
+  // AES-128-GCM has the smallest key of the built-in list.
+  ASSERT_EQ(reset_ciphers.size(), 3u);
+  EXPECT_EQ(reset_ciphers.back(), SSL_CIPHER_AES_128_GCM_SHA256);
+}
+
 TEST_P(SSLVersionTest, SessionIDContext) {
   static const uint8_t kContext1[] = {1};
   static const uint8_t kContext2[] = {2};
@@ -11662,6 +11937,199 @@ TEST_F(SSLPAKETest, SPAKE2PLUS) {
   bssl::UniquePtr<SSL> client, server;
   ASSERT_TRUE(ConnectClientAndServer(&client, &server, client_ctx.get(),
                                      server_ctx.get()));
+}
+
+// A client with a PAKE credential doesn't fall back to TLS 1.2, which would
+// authenticate the server with its certificate alone, when its TLS 1.3 ciphers
+// are below the minimum strength.
+TEST_F(SSLPAKETest, TLS13CiphersBelowMinimumStrength) {
+  static const uint16_t kAES128[] = {SSL_CIPHER_AES_128_GCM_SHA256};
+  UniquePtr<SSL_CTX> client_ctx = NewClientContext("password", 1);
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(SSL_CTX_set1_tls13_ciphers(client_ctx.get(), kAES128, nullptr,
+                                         std::size(kAES128)));
+  ASSERT_TRUE(SSL_CTX_set_tls13_cipher_policy(client_ctx.get(), 256, 1));
+  SSL_CTX_set_custom_verify(client_ctx.get(), SSL_VERIFY_PEER,
+                            AcceptAnyCertificate);
+  UniquePtr<SSL_CTX> server_ctx =
+      CreateContextWithTestCertificate(TLS_method());
+  ASSERT_TRUE(server_ctx);
+
+  bssl::UniquePtr<SSL> client, server;
+  EXPECT_FALSE(ConnectClientAndServer(&client, &server, client_ctx.get(),
+                                      server_ctx.get()));
+  EXPECT_TRUE(
+      ErrorEquals(ERR_get_error(), ERR_LIB_SSL, SSL_R_NO_CIPHERS_AVAILABLE));
+}
+
+// A server with a PAKE credential and a certificate serves clients without the
+// PAKE too, so it falls back to TLS 1.2 with the certificate when its TLS 1.3
+// ciphers are below the minimum strength.
+TEST_F(SSLPAKETest, TLS13CiphersBelowMinimumStrengthWithCertificate) {
+  static const uint16_t kAES128[] = {SSL_CIPHER_AES_128_GCM_SHA256};
+  for (bool legacy_credential : {false, true}) {
+    SCOPED_TRACE(legacy_credential);
+    UniquePtr<SSL_CTX> server_ctx = NewServerContext("password", 1);
+    ASSERT_TRUE(server_ctx);
+    if (legacy_credential) {
+      ASSERT_TRUE(SSL_CTX_use_certificate(server_ctx.get(),
+                                          GetTestCertificate().get()));
+      ASSERT_TRUE(SSL_CTX_use_PrivateKey(server_ctx.get(), GetTestKey().get()));
+    } else {
+      UniquePtr<CRYPTO_BUFFER> leaf = GetTestCertificateBuffer();
+      ASSERT_TRUE(leaf);
+      CRYPTO_BUFFER *chain[] = {leaf.get()};
+      UniquePtr<SSL_CREDENTIAL> cred(SSL_CREDENTIAL_new_x509());
+      ASSERT_TRUE(cred);
+      ASSERT_TRUE(
+          SSL_CREDENTIAL_set1_cert_chain(cred.get(), chain, std::size(chain)));
+      ASSERT_TRUE(
+          SSL_CREDENTIAL_set1_private_key(cred.get(), GetTestKey().get()));
+      ASSERT_TRUE(SSL_CTX_add1_credential(server_ctx.get(), cred.get()));
+    }
+    ASSERT_TRUE(SSL_CTX_set1_tls13_ciphers(server_ctx.get(), kAES128, nullptr,
+                                           std::size(kAES128)));
+    ASSERT_TRUE(SSL_CTX_set_tls13_cipher_policy(server_ctx.get(), 256, 1));
+    UniquePtr<SSL_CTX> client_ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(client_ctx);
+    SSL_CTX_set_custom_verify(client_ctx.get(), SSL_VERIFY_PEER,
+                              AcceptAnyCertificate);
+
+    bssl::UniquePtr<SSL> client, server;
+    ASSERT_TRUE(ConnectClientAndServer(&client, &server, client_ctx.get(),
+                                       server_ctx.get()));
+    EXPECT_EQ(SSL_version(client.get()), TLS1_2_VERSION);
+  }
+}
+
+UniquePtr<SSL_CREDENTIAL> NewTestPreSharedKey() {
+  static const uint8_t kKey[32] = {1, 2, 3};
+  static const uint8_t kIdentity[] = {'p', 's', 'k'};
+  return UniquePtr<SSL_CREDENTIAL>(SSL_CREDENTIAL_new_pre_shared_key(
+      kKey, sizeof(kKey), kIdentity, sizeof(kIdentity), EVP_sha256(), nullptr,
+      0));
+}
+
+// External pre-shared keys require TLS 1.3, as PAKEs do, so a client that
+// only accepts the server's authentication with one doesn't fall back to
+// TLS 1.2 when its TLS 1.3 ciphers are below the minimum strength, unless it
+// verifies certificates too.
+TEST(SSLTest, PreSharedKeyClientTLS13CiphersBelowMinimumStrength) {
+  static const uint16_t kAES128[] = {SSL_CIPHER_AES_128_GCM_SHA256};
+  UniquePtr<SSL_CREDENTIAL> psk = NewTestPreSharedKey();
+  ASSERT_TRUE(psk);
+  for (bool verify_peer : {false, true}) {
+    SCOPED_TRACE(verify_peer);
+    UniquePtr<SSL_CTX> client_ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(client_ctx);
+    ASSERT_TRUE(SSL_CTX_add1_credential(client_ctx.get(), psk.get()));
+    ASSERT_TRUE(SSL_CTX_set1_tls13_ciphers(client_ctx.get(), kAES128, nullptr,
+                                           std::size(kAES128)));
+    ASSERT_TRUE(SSL_CTX_set_tls13_cipher_policy(client_ctx.get(), 256, 1));
+    if (verify_peer) {
+      SSL_CTX_set_custom_verify(client_ctx.get(), SSL_VERIFY_PEER,
+                                AcceptAnyCertificate);
+    }
+    UniquePtr<SSL_CTX> server_ctx =
+        CreateContextWithTestCertificate(TLS_method());
+    ASSERT_TRUE(server_ctx);
+
+    bssl::UniquePtr<SSL> client, server;
+    if (verify_peer) {
+      ASSERT_TRUE(ConnectClientAndServer(&client, &server, client_ctx.get(),
+                                         server_ctx.get()));
+      EXPECT_EQ(SSL_version(client.get()), TLS1_2_VERSION);
+      continue;
+    }
+    ASSERT_TRUE(CreateClientAndServer(&client, &server, client_ctx.get(),
+                                      server_ctx.get()));
+    EXPECT_EQ(SSL_do_handshake(client.get()), -1);
+    EXPECT_EQ(SSL_get_error(client.get(), -1), SSL_ERROR_SSL);
+    EXPECT_TRUE(
+        ErrorEquals(ERR_get_error(), ERR_LIB_SSL, SSL_R_NO_CIPHERS_AVAILABLE));
+  }
+}
+
+// A server whose only credential is an external pre-shared key keeps TLS 1.3
+// when its TLS 1.3 ciphers are below the minimum strength, as it can't
+// authenticate in TLS 1.2, and one that also has a certificate serves clients
+// without the key in TLS 1.2.
+TEST(SSLTest, PreSharedKeyServerTLS13CiphersBelowMinimumStrength) {
+  static const uint16_t kAES128[] = {SSL_CIPHER_AES_128_GCM_SHA256};
+  UniquePtr<SSL_CREDENTIAL> psk = NewTestPreSharedKey();
+  ASSERT_TRUE(psk);
+  for (bool certificate : {false, true}) {
+    SCOPED_TRACE(certificate);
+    UniquePtr<SSL_CTX> server_ctx =
+        certificate ? CreateContextWithTestCertificate(TLS_method())
+                    : UniquePtr<SSL_CTX>(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(server_ctx);
+    ASSERT_TRUE(SSL_CTX_add1_credential(server_ctx.get(), psk.get()));
+    ASSERT_TRUE(SSL_CTX_set1_tls13_ciphers(server_ctx.get(), kAES128, nullptr,
+                                           std::size(kAES128)));
+    ASSERT_TRUE(SSL_CTX_set_tls13_cipher_policy(server_ctx.get(), 256, 1));
+    UniquePtr<SSL_CTX> client_ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(client_ctx);
+    if (certificate) {
+      SSL_CTX_set_custom_verify(client_ctx.get(), SSL_VERIFY_PEER,
+                                AcceptAnyCertificate);
+    } else {
+      ASSERT_TRUE(SSL_CTX_add1_credential(client_ctx.get(), psk.get()));
+    }
+
+    bssl::UniquePtr<SSL> client, server;
+    if (certificate) {
+      ASSERT_TRUE(ConnectClientAndServer(&client, &server, client_ctx.get(),
+                                         server_ctx.get()));
+      EXPECT_EQ(SSL_version(client.get()), TLS1_2_VERSION);
+      continue;
+    }
+    ASSERT_TRUE(CreateClientAndServer(&client, &server, client_ctx.get(),
+                                      server_ctx.get()));
+    EXPECT_FALSE(CompleteHandshakes(client.get(), server.get()));
+    EXPECT_EQ(SSL_version(server.get()), TLS1_3_VERSION);
+    EXPECT_TRUE(
+        ErrorEquals(ERR_get_error(), ERR_LIB_SSL, SSL_R_NO_SHARED_CIPHER));
+  }
+}
+
+// A server whose only credential is an external pre-shared key, which needs
+// TLS 1.3, still serves TLS 1.2 clients with its TLS 1.2 PSK callback when its
+// TLS 1.3 ciphers are below the minimum strength.
+TEST(SSLTest, PreSharedKeyServerWithTLS12PSKCallbackBelowMinimumStrength) {
+  static const uint16_t kAES128[] = {SSL_CIPHER_AES_128_GCM_SHA256};
+  UniquePtr<SSL_CREDENTIAL> psk = NewTestPreSharedKey();
+  ASSERT_TRUE(psk);
+  UniquePtr<SSL_CTX> server_ctx(SSL_CTX_new(TLS_method()));
+  ASSERT_TRUE(server_ctx);
+  ASSERT_TRUE(SSL_CTX_add1_credential(server_ctx.get(), psk.get()));
+  SSL_CTX_set_psk_server_callback(
+      server_ctx.get(), [](SSL *ssl, const char *identity, uint8_t *key,
+                           unsigned max_key_len) -> unsigned {
+        OPENSSL_memset(key, 1, 16);
+        return 16;
+      });
+  ASSERT_TRUE(SSL_CTX_set_strict_cipher_list(server_ctx.get(), "PSK"));
+  ASSERT_TRUE(SSL_CTX_set1_tls13_ciphers(server_ctx.get(), kAES128, nullptr,
+                                         std::size(kAES128)));
+  ASSERT_TRUE(SSL_CTX_set_tls13_cipher_policy(server_ctx.get(), 256, 1));
+  UniquePtr<SSL_CTX> client_ctx(SSL_CTX_new(TLS_method()));
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(SSL_CTX_set_max_proto_version(client_ctx.get(), TLS1_2_VERSION));
+  SSL_CTX_set_psk_client_callback(
+      client_ctx.get(),
+      [](SSL *ssl, const char *hint, char *identity, unsigned max_identity_len,
+         uint8_t *key, unsigned max_key_len) -> unsigned {
+        OPENSSL_strlcpy(identity, "psk", max_identity_len);
+        OPENSSL_memset(key, 1, 16);
+        return 16;
+      });
+  ASSERT_TRUE(SSL_CTX_set_strict_cipher_list(client_ctx.get(), "PSK"));
+
+  bssl::UniquePtr<SSL> client, server;
+  ASSERT_TRUE(ConnectClientAndServer(&client, &server, client_ctx.get(),
+                                     server_ctx.get()));
+  EXPECT_EQ(SSL_version(client.get()), TLS1_2_VERSION);
 }
 
 TEST_F(SSLPAKETest, ClientLimit) {
