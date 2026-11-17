@@ -170,12 +170,20 @@ UniquePtr<X509> get_trusted_issuer(X509_STORE_CTX *ctx, const X509 *x) {
 
 // Check a certificate chains extensions for consistency with the supplied
 // purpose
-int check_chain_extensions(X509_STORE_CTX *ctx) {
+// `chain_trusted` is whether the trust check found the chain to end at a trust
+// anchor, rather than at a certificate that a verify callback let path
+// validation continue with. An anchor whose rejection a callback overrode is
+// one only with `X509_V_FLAG_PARTIAL_CHAIN`, as `check_trust` decides.
+int check_chain_extensions(X509_STORE_CTX *ctx, bool chain_trusted) {
   int plen = 0;
   int purpose = ctx->param->purpose;
   int num = static_cast<int>(sk_X509_num(ctx->chain));
   for (int i = 0; i < num; i++) {
     X509Impl *x = FromOpaque(sk_X509_value(ctx->chain, i));
+    // The flags below come from the extensions, which an issuer check that a
+    // callback waived may have left unparsed. Extensions that don't parse fail
+    // the checks that use them, as the CA check, rather than the chain.
+    x509v3_cache_extensions(x);
     if (!(ctx->param->flags & X509_V_FLAG_IGNORE_CRITICAL) &&
         (x->ex_flags & EXFLAG_CRITICAL)) {
       ctx->error = X509_V_ERR_UNHANDLED_CRITICAL_EXTENSION;
@@ -185,6 +193,25 @@ int check_chain_extensions(X509_STORE_CTX *ctx) {
     }
 
     int must_be_ca = i > 0;
+    // Only an anchor without the CA bit is pinned. A CA that fails the check
+    // otherwise is checked as usual, and so is an anchor whose key usage does
+    // not allow it to sign certificates, or whose extensions don't parse.
+    // `X509_check_ca` caches the extensions.
+    if (must_be_ca && i == num - 1 && chain_trusted &&
+        (ctx->param->flags & X509_V_FLAG_PINNED_TRUST_ANCHOR) &&
+        !X509_check_ca(x) && !(x->ex_flags & (EXFLAG_CA | EXFLAG_INVALID)) &&
+        (!(x->ex_flags & EXFLAG_KUSAGE) ||
+         (x->ex_kusage & X509v3_KU_KEY_CERT_SIGN))) {
+      // The anchor needs no CA bit, but its extended key usage still restricts
+      // the chain.
+      if (purpose > 0 && !x509_check_issuer_purpose(x, purpose)) {
+        ctx->error = X509_V_ERR_INVALID_PURPOSE;
+        if (!call_verify_cb_at_depth(0, ctx, i)) {
+          return 0;
+        }
+      }
+      continue;
+    }
     if (must_be_ca && !X509_check_ca(x)) {
       ctx->error = X509_V_ERR_INVALID_CA;
       if (!call_verify_cb_at_depth(0, ctx, i)) {
@@ -1134,7 +1161,7 @@ int X509_verify_cert(X509_STORE_CTX *ctx) {
   // verify callback, we now have either a path from the target certificate to
   // some trust anchor or a directly trusted leaf.
   assert(sk_X509_num(ctx->chain) >= 1);
-  if (!check_chain_extensions(ctx) ||           //
+  if (!check_chain_extensions(ctx, trust == X509_TRUST_TRUSTED) ||  //
       !check_id(ctx) ||                         //
       !check_revocation(ctx) ||                 //
       !check_blocklist(ctx) ||                  //

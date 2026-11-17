@@ -3306,6 +3306,14 @@ OPENSSL_EXPORT int X509_VERIFY_PARAM_set1(X509_VERIFY_PARAM *to,
 // X509_V_FLAG_ALLOW_TIMEZONE_OFFSET allows `notBefore` and `notAfter` fields
 // to contain a time zone offset.
 #define X509_V_FLAG_ALLOW_TIMEZONE_OFFSET 0x1000000
+// X509_V_FLAG_PINNED_TRUST_ANCHOR trusts a trust anchor that is not a CA as a
+// pinned certificate. Such an anchor is exempt from the CA check that would
+// otherwise apply to it as an issuer. Its key usage still applies: an anchor
+// whose key usage extension omits keyCertSign issues no certificates, and its
+// extended key usage restricts the purpose of the chain.
+// Anchors that are CAs, and anchors whose extensions don't parse, are checked
+// as usual.
+#define X509_V_FLAG_PINNED_TRUST_ANCHOR 0x40000000
 // X509_V_FLAG_ALLOW_SHA1 allows certificates and CRLs signed with SHA-1 to be
 // accepted during verification.
 // This flag is tentatively set by default. Users should add this explicitly if

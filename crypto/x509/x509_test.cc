@@ -2439,6 +2439,242 @@ bool AddIssuingDistributionPoint(X509_CRL *crl,
                                /*crit=*/1, /*flags=*/0);
 }
 
+// A trust anchor that is not a CA is trusted as a pinned certificate with
+// `X509_V_FLAG_PINNED_TRUST_ANCHOR`, unless its key usage doesn't allow it to
+// sign certificates or its extensions don't parse.
+TEST_P(X509VerifyTest, PinnedTrustAnchor) {
+  UniquePtr<EVP_PKEY> anchor_key(
+      EVP_PKEY_generate_from_alg(EVP_pkey_ec_p256()));
+  ASSERT_TRUE(anchor_key);
+  UniquePtr<EVP_PKEY> leaf_key(EVP_PKEY_generate_from_alg(EVP_pkey_ec_p256()));
+  ASSERT_TRUE(leaf_key);
+
+  auto make_anchor = [&](std::function<bool(X509 *)> add_extensions) {
+    UniquePtr<X509> anchor =
+        MakeTestCert("Anchor", "Anchor", anchor_key.get(), /*is_ca=*/false);
+    if (!anchor || (add_extensions && !add_extensions(anchor.get())) ||
+        !X509_sign(anchor.get(), anchor_key.get(), EVP_sha256())) {
+      return UniquePtr<X509>();
+    }
+    return anchor;
+  };
+
+  UniquePtr<X509> leaf =
+      MakeTestCert("Anchor", "Leaf", leaf_key.get(), /*is_ca=*/false);
+  ASSERT_TRUE(leaf);
+  ASSERT_TRUE(X509_sign(leaf.get(), anchor_key.get(), EVP_sha256()));
+
+  UniquePtr<X509> anchor = make_anchor(nullptr);
+  ASSERT_TRUE(anchor);
+  UniquePtr<X509> anchor_cert_sign = make_anchor(
+      [](X509 *x509) { return AddKeyUsage(x509, {KeyUsage::kKeyCertSign}); });
+  ASSERT_TRUE(anchor_cert_sign);
+  UniquePtr<X509> anchor_no_cert_sign = make_anchor([](X509 *x509) {
+    return AddKeyUsage(x509, {KeyUsage::kDigitalSignature});
+  });
+  ASSERT_TRUE(anchor_no_cert_sign);
+  UniquePtr<X509> anchor_invalid_key_usage = make_anchor([](X509 *x509) {
+    UniquePtr<X509_EXTENSION> ext(X509_EXTENSION_new());
+    return ext &&
+           X509_EXTENSION_set_object(ext.get(), OBJ_nid2obj(NID_key_usage)) &&
+           X509_EXTENSION_set_critical(ext.get(), 1) &&
+           X509_add_ext(x509, ext.get(), /*loc=*/-1);
+  });
+  ASSERT_TRUE(anchor_invalid_key_usage);
+
+  // Without the flag, the anchor is not a CA.
+  EXPECT_EQ(X509_V_ERR_INVALID_CA,
+            Verify(leaf.get(), {anchor.get()}, {}, {}, 0));
+  // Nor does verification without the flag reject extensions that it doesn't
+  // use, as of a leaf that is trusted itself
+  UniquePtr<X509> leaf_invalid_key_usage =
+      MakeTestCert("Anchor", "Leaf", leaf_key.get(), /*is_ca=*/false);
+  ASSERT_TRUE(leaf_invalid_key_usage);
+  {
+    UniquePtr<X509_EXTENSION> ext(X509_EXTENSION_new());
+    ASSERT_TRUE(ext);
+    ASSERT_TRUE(
+        X509_EXTENSION_set_object(ext.get(), OBJ_nid2obj(NID_key_usage)));
+    ASSERT_TRUE(X509_add_ext(leaf_invalid_key_usage.get(), ext.get(), -1));
+  }
+  ASSERT_TRUE(X509_sign(leaf_invalid_key_usage.get(), anchor_key.get(),
+                        EVP_sha256()));
+  EXPECT_EQ(X509_V_OK, Verify(leaf_invalid_key_usage.get(),
+                              {leaf_invalid_key_usage.get()}, {}, {},
+                              X509_V_FLAG_PARTIAL_CHAIN));
+
+  EXPECT_EQ(X509_V_OK, Verify(leaf.get(), {anchor.get()}, {}, {},
+                              X509_V_FLAG_PINNED_TRUST_ANCHOR));
+  // The extended key usage of the anchor restricts the purpose of the chain
+  UniquePtr<X509> anchor_client_auth = make_anchor([](X509 *x509) {
+    return AddExtendedKeyUsage(x509, {NID_client_auth});
+  });
+  ASSERT_TRUE(anchor_client_auth);
+  auto set_purpose = [](int purpose) {
+    return [purpose](X509_STORE_CTX *ctx) {
+      X509_STORE_CTX_set_purpose(ctx, purpose);
+    };
+  };
+  EXPECT_EQ(X509_V_ERR_INVALID_PURPOSE,
+            Verify(leaf.get(), {anchor_client_auth.get()}, {}, {},
+                   X509_V_FLAG_PINNED_TRUST_ANCHOR,
+                   set_purpose(X509_PURPOSE_SSL_SERVER)));
+  EXPECT_EQ(X509_V_OK, Verify(leaf.get(), {anchor_client_auth.get()}, {}, {},
+                              X509_V_FLAG_PINNED_TRUST_ANCHOR,
+                              set_purpose(X509_PURPOSE_SSL_CLIENT)));
+  // Also for timestamping, which checks no extended key usage of a CA
+  UniquePtr<X509> timestamp_leaf =
+      MakeTestCert("Anchor", "Timestamp", leaf_key.get(), /*is_ca=*/false);
+  ASSERT_TRUE(timestamp_leaf);
+  ASSERT_TRUE(AddExtendedKeyUsage(timestamp_leaf.get(), {NID_time_stamp}));
+  ASSERT_TRUE(
+      X509_sign(timestamp_leaf.get(), anchor_key.get(), EVP_sha256()));
+  UniquePtr<X509> anchor_timestamp = make_anchor([](X509 *x509) {
+    return AddExtendedKeyUsage(x509, {NID_time_stamp});
+  });
+  ASSERT_TRUE(anchor_timestamp);
+  EXPECT_EQ(X509_V_ERR_INVALID_PURPOSE,
+            Verify(timestamp_leaf.get(), {anchor_client_auth.get()}, {}, {},
+                   X509_V_FLAG_PINNED_TRUST_ANCHOR,
+                   set_purpose(X509_PURPOSE_TIMESTAMP_SIGN)));
+  EXPECT_EQ(X509_V_OK,
+            Verify(timestamp_leaf.get(), {anchor_timestamp.get()}, {}, {},
+                   X509_V_FLAG_PINNED_TRUST_ANCHOR,
+                   set_purpose(X509_PURPOSE_TIMESTAMP_SIGN)));
+  EXPECT_EQ(X509_V_OK, Verify(timestamp_leaf.get(), {anchor.get()}, {}, {},
+                              X509_V_FLAG_PINNED_TRUST_ANCHOR,
+                              set_purpose(X509_PURPOSE_TIMESTAMP_SIGN)));
+
+  // Only the anchor at the top of the chain is pinned: an intermediate under it
+  // that is not a CA is rejected, while one that is a CA is trusted.
+  UniquePtr<EVP_PKEY> intermediate_key(
+      EVP_PKEY_generate_from_alg(EVP_pkey_ec_p256()));
+  ASSERT_TRUE(intermediate_key);
+  UniquePtr<X509> leaf_under_intermediate = MakeTestCert(
+      "Intermediate", "Leaf", leaf_key.get(), /*is_ca=*/false);
+  ASSERT_TRUE(leaf_under_intermediate);
+  ASSERT_TRUE(X509_sign(leaf_under_intermediate.get(), intermediate_key.get(),
+                        EVP_sha256()));
+  for (bool intermediate_is_ca : {false, true}) {
+    SCOPED_TRACE(intermediate_is_ca);
+    UniquePtr<X509> intermediate =
+        MakeTestCert("Anchor", "Intermediate", intermediate_key.get(),
+                     intermediate_is_ca);
+    ASSERT_TRUE(intermediate);
+    ASSERT_TRUE(
+        X509_sign(intermediate.get(), anchor_key.get(), EVP_sha256()));
+    EXPECT_EQ(intermediate_is_ca ? X509_V_OK : X509_V_ERR_INVALID_CA,
+              Verify(leaf_under_intermediate.get(), {anchor.get()},
+                     {intermediate.get()}, {},
+                     X509_V_FLAG_PINNED_TRUST_ANCHOR));
+  }
+
+  // A self-signed certificate that is not trusted is not pinned, also where a
+  // callback lets path validation continue with it.
+  auto accept_untrusted = [](X509_STORE_CTX *ctx) {
+    X509_STORE_CTX_set_verify_cb(
+        ctx, [](int ok, X509_STORE_CTX *store_ctx) -> int {
+          int err = X509_STORE_CTX_get_error(store_ctx);
+          return ok || err == X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN ||
+                 err == X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY;
+        });
+  };
+  EXPECT_EQ(X509_V_ERR_INVALID_CA,
+            Verify(leaf.get(), {}, {anchor.get()}, {},
+                   X509_V_FLAG_PINNED_TRUST_ANCHOR | X509_V_FLAG_PARTIAL_CHAIN,
+                   accept_untrusted));
+
+  EXPECT_EQ(X509_V_OK, Verify(leaf.get(), {anchor_cert_sign.get()}, {}, {},
+                              X509_V_FLAG_PINNED_TRUST_ANCHOR));
+  EXPECT_NE(X509_V_OK, Verify(leaf.get(), {anchor_no_cert_sign.get()}, {}, {},
+                              X509_V_FLAG_PINNED_TRUST_ANCHOR));
+  // Also where a callback waives the issuer check of its key usage, as the
+  // anchor then still issues no certificates.
+  auto waive_key_usage = [](X509_STORE_CTX *ctx) {
+    X509_STORE_CTX_set_verify_cb(
+        ctx, [](int ok, X509_STORE_CTX *store_ctx) -> int {
+          return ok || X509_STORE_CTX_get_error(store_ctx) ==
+                           X509_V_ERR_KEYUSAGE_NO_CERTSIGN;
+        });
+  };
+  EXPECT_EQ(X509_V_ERR_INVALID_CA,
+            Verify(leaf.get(), {anchor_no_cert_sign.get()}, {}, {},
+                   X509_V_FLAG_PINNED_TRUST_ANCHOR | X509_V_FLAG_PARTIAL_CHAIN |
+                       X509_V_FLAG_CB_ISSUER_CHECK,
+                   waive_key_usage));
+  EXPECT_NE(X509_V_OK,
+            Verify(leaf.get(), {anchor_invalid_key_usage.get()}, {}, {},
+                   X509_V_FLAG_PINNED_TRUST_ANCHOR));
+
+  // A callback that waives the issuer check and the extensions that don't
+  // parse does not waive the CA check of an anchor that a partial chain
+  // trusts, which isn't checked for being self-signed.
+  UniquePtr<X509> partial_anchor =
+      MakeTestCert("Other", "Anchor", anchor_key.get(), /*is_ca=*/false);
+  ASSERT_TRUE(partial_anchor);
+  {
+    UniquePtr<X509_EXTENSION> ext(X509_EXTENSION_new());
+    ASSERT_TRUE(ext);
+    ASSERT_TRUE(
+        X509_EXTENSION_set_object(ext.get(), OBJ_nid2obj(NID_key_usage)));
+    ASSERT_TRUE(X509_EXTENSION_set_critical(ext.get(), 1));
+    ASSERT_TRUE(X509_add_ext(partial_anchor.get(), ext.get(), /*loc=*/-1));
+  }
+  ASSERT_TRUE(X509_sign(partial_anchor.get(), anchor_key.get(), EVP_sha256()));
+  auto waive_issuer_check = [](X509_STORE_CTX *ctx) {
+    X509_STORE_CTX_set_verify_cb(
+        ctx, [](int ok, X509_STORE_CTX *store_ctx) -> int {
+          int err = X509_STORE_CTX_get_error(store_ctx);
+          return ok || err == X509_V_ERR_UNSPECIFIED ||
+                 err == X509_V_ERR_INVALID_EXTENSION;
+        });
+  };
+  EXPECT_EQ(X509_V_ERR_INVALID_CA,
+            Verify(leaf.get(), {partial_anchor.get()}, {}, {},
+                   X509_V_FLAG_PINNED_TRUST_ANCHOR |
+                       X509_V_FLAG_PARTIAL_CHAIN | X509_V_FLAG_CB_ISSUER_CHECK,
+                   waive_issuer_check));
+
+  // An unhandled critical extension of a pinned anchor is rejected, also when
+  // a callback waives the name mismatch of the issuer check. Only a trusted
+  // stack, not a store, offers an issuer whose name does not match.
+  UniquePtr<X509> critical_anchor =
+      MakeTestCert("Other", "Pinned", anchor_key.get(), /*is_ca=*/false);
+  ASSERT_TRUE(critical_anchor);
+  {
+    static const uint8_t kUnknownOID[] = {0x2a, 0x03, 0x04};
+    UniquePtr<ASN1_OBJECT> obj(ASN1_OBJECT_create(
+        NID_undef, kUnknownOID, sizeof(kUnknownOID), nullptr, nullptr));
+    ASSERT_TRUE(obj);
+    UniquePtr<ASN1_OCTET_STRING> data(ASN1_OCTET_STRING_new());
+    ASSERT_TRUE(data);
+    ASSERT_TRUE(ASN1_OCTET_STRING_set(data.get(),
+                                      reinterpret_cast<const uint8_t *>("\x05\x00"),
+                                      2));
+    UniquePtr<X509_EXTENSION> ext(X509_EXTENSION_create_by_OBJ(
+        nullptr, obj.get(), /*crit=*/1, data.get()));
+    ASSERT_TRUE(ext);
+    ASSERT_TRUE(X509_add_ext(critical_anchor.get(), ext.get(), /*loc=*/-1));
+  }
+  ASSERT_TRUE(
+      X509_sign(critical_anchor.get(), anchor_key.get(), EVP_sha256()));
+  auto waive_name_mismatch = [](X509_STORE_CTX *ctx) {
+    X509_STORE_CTX_set_verify_cb(
+        ctx, [](int ok, X509_STORE_CTX *store_ctx) -> int {
+          return ok || X509_STORE_CTX_get_error(store_ctx) ==
+                           X509_V_ERR_SUBJECT_ISSUER_MISMATCH;
+        });
+  };
+  if (!use_store()) {
+    EXPECT_EQ(X509_V_ERR_UNHANDLED_CRITICAL_EXTENSION,
+              Verify(leaf.get(), {critical_anchor.get()}, {}, {},
+                     X509_V_FLAG_PINNED_TRUST_ANCHOR |
+                         X509_V_FLAG_PARTIAL_CHAIN |
+                         X509_V_FLAG_CB_ISSUER_CHECK,
+                     waive_name_mismatch));
+  }
+}
+
 TEST_P(X509VerifyTest, NameConstraints) {
   enum class SpecialCase {
     // The constraint as excludedSubtrees is the opposite of permittedSubtrees.
