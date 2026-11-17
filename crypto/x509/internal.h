@@ -524,6 +524,11 @@ OPENSSL_EXPORT int x509v3_looks_like_dns_name(const unsigned char *in,
 // invalid.
 OPENSSL_EXPORT int x509v3_cache_extensions(const X509 *x);
 
+// x509_check_issuer_purpose returns one if the extended key usage of `x`
+// allows it to issue certificates for purpose `id`, and zero otherwise. Unlike
+// `X509_check_purpose` with `ca` set, it doesn't require `x` to be a CA.
+int x509_check_issuer_purpose(const X509 *x, int id);
+
 // x509v3_a2i_ipadd decodes `ipasc` as an IPv4 or IPv6 address. IPv6 addresses
 // use colon-separated syntax while IPv4 addresses use dotted decimal syntax. If
 // it decodes an IPv4 address, it writes the result to the first four bytes of

@@ -216,6 +216,25 @@ int X509_check_purpose(const X509 *x, int id, int ca) {
   return pt->check_purpose(pt, x, ca);
 }
 
+int bssl::x509_check_issuer_purpose(const X509 *x, int id) {
+  if (!x509v3_cache_extensions(x)) {
+    return 0;
+  }
+  if (id == -1 || id == X509_PURPOSE_ANY) {
+    return 1;
+  }
+  // Timestamping checks no extended key usage of issuers, but that of a pinned
+  // anchor still restricts the chain.
+  if (id == X509_PURPOSE_TIMESTAMP_SIGN) {
+    return !xku_reject(x, XKU_TIMESTAMP);
+  }
+  const X509_PURPOSE *pt = X509_PURPOSE_get0(id);
+  if (pt == nullptr) {
+    return 0;
+  }
+  return pt->check_purpose(pt, x, /*ca=*/1);
+}
+
 const X509_PURPOSE *X509_PURPOSE_get0(int id) {
   for (const auto &p : xstandard) {
     if (p.purpose == id) {
